@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antenna - All Screens</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background: #1a1a1e;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 40px 20px;
+            font-family: 'Inter', sans-serif;
+        }
+
+        h1 {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 14px;
+            font-weight: 700;
+            color: #ff9d00;
+            letter-spacing: 3px;
+            text-transform: uppercase;
+            margin-bottom: 8px;
+            text-shadow: 0 0 20px rgba(255, 157, 0, 0.3);
+        }
+
+        .subtitle {
+            font-size: 12px;
+            color: #555;
+            margin-bottom: 40px;
+            letter-spacing: 1px;
+        }
+
+        .screens {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .screen-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .screen-label {
+            font-family: 'JetBrains Mono', monospace;
+            font-size: 10px;
+            font-weight: 700;
+            color: #555;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+        }
+
+        .screen-label.active-label {
+            color: #ff9d00;
+        }
+
+        iframe {
+            width: 390px;
+            height: 844px;
+            border: 2px solid #2a2a2e;
+            border-radius: 24px;
+            overflow: hidden;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 1px rgba(255,255,255,0.05);
+        }
+    </style>
+</head>
+<body>
+    <h1>Antenna</h1>
+    <p class="subtitle">Agent-mediated social discovery</p>
+    <div class="screens">
+        <div class="screen-wrapper">
+            <span class="screen-label">PROFILE</span>
+            <iframe src="profile-mode.html" frameborder="0"></iframe>
+        </div>
+        <div class="screen-wrapper">
+            <span class="screen-label active-label">NEARBY</span>
+            <iframe src="radar-mode.html" frameborder="0"></iframe>
+        </div>
+        <div class="screen-wrapper">
+            <span class="screen-label">MATCHES</span>
+            <iframe src="matches-mode.html" frameborder="0"></iframe>
+        </div>
+    </div>
+</body>
+</html>

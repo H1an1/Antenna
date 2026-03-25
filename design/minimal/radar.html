@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Antenna - Nearby (Minimal)</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+        :root {
+            --screen-dark: #121416;
+            --surface: #1a1c1f;
+            --surface-hover: #222528;
+            --orange: #e35d25;
+            --amber: #ff9d00;
+            --white: #f0f2f5;
+            --gray-1: #c8cdd3;
+            --gray-2: #8b95a1;
+            --gray-3: #555b61;
+            --gray-4: #2a2d31;
+            --alu-base: #cdd1d5;
+            --alu-dark: #a8adb3;
+            --alu-light: #e8ebed;
+            --engrave: #555b61;
+            --font-ui: 'Inter', -apple-system, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            background: var(--alu-base);
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; font-family: var(--font-ui);
+        }
+
+        .app {
+            width: 100%; max-width: 460px; height: 100dvh;
+            background: linear-gradient(160deg, var(--alu-light) 0%, var(--alu-base) 40%, var(--alu-dark) 100%);
+            display: flex; flex-direction: column; position: relative;
+            box-shadow: 0 0 50px rgba(0,0,0,0.3);
+        }
+
+        /* Metal noise overlay */
+        .app::before {
+            content: ""; position: absolute; inset: 0;
+            background-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23n)" opacity="0.06"/></svg>');
+            pointer-events: none; z-index: 0;
+        }
+
+        /* Top bar */
+        .top-bar {
+            padding: 20px 20px 16px; display: flex; align-items: center;
+            justify-content: space-between; position: relative; z-index: 10;
+        }
+
+        .logo {
+            display: flex; align-items: center; gap: 8px;
+        }
+
+        .logo-text {
+            font-family: var(--font-mono); font-size: 13px; font-weight: 700;
+            letter-spacing: 2px; text-transform: uppercase;
+            color: var(--engrave);
+            text-shadow: 0 1px 0 rgba(255,255,255,0.7);
+        }
+
+        .led {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: #00ff41;
+            box-shadow: 0 0 6px #00ff41, inset 0 1px 1px rgba(0,0,0,0.3);
+        }
+
+        .range-pills {
+            display: flex; gap: 4px;
+        }
+
+        .pill {
+            font-family: var(--font-mono); font-size: 10px; font-weight: 500;
+            padding: 5px 10px; border-radius: 20px;
+            color: var(--engrave); background: transparent;
+            border: none; cursor: pointer;
+            text-shadow: 0 1px 0 rgba(255,255,255,0.6);
+            letter-spacing: 0.5px;
+        }
+
+        .pill.active {
+            background: rgba(0,0,0,0.08);
+            box-shadow: inset 1px 1px 3px rgba(0,0,0,0.15), inset -1px -1px 2px rgba(255,255,255,0.4);
+            color: var(--orange);
+            text-shadow: none;
+        }
+
+        /* Screen area */
+        .screen-wrap {
+            flex: 1; padding: 0 14px; position: relative; z-index: 5;
+            display: flex; flex-direction: column; min-height: 0;
+        }
+
+        .screen-bezel {
+            flex: 1; border-radius: 18px;
+            background: var(--alu-base); padding: 5px;
+            box-shadow: inset 4px 4px 10px rgba(0,0,0,0.18),
+                        inset -4px -4px 10px rgba(255,255,255,0.7);
+            display: flex; flex-direction: column; min-height: 0;
+        }
+
+        .screen {
+            flex: 1; border-radius: 14px;
+            background: var(--screen-dark);
+            overflow-y: auto; overflow-x: hidden;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+            padding: 16px 14px;
+            display: flex; flex-direction: column; gap: 2px;
+        }
+
+        /* Signal cards */
+        .card {
+            padding: 14px 0;
+            border-bottom: 1px solid rgba(255,255,255,0.04);
+            display: flex; align-items: center; gap: 14px;
+        }
+
+        .card:last-child { border-bottom: none; }
+
+        .card-body { flex: 1; min-width: 0; }
+
+        .card-name {
+            font-size: 15px; font-weight: 600; color: var(--white);
+            margin-bottom: 3px; letter-spacing: 0.2px;
+        }
+
+        .card-bio {
+            font-size: 12px; color: var(--gray-2); line-height: 1.4;
+            white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+        }
+
+        .card-right {
+            display: flex; flex-direction: column; align-items: flex-end; gap: 8px;
+            flex-shrink: 0;
+        }
+
+        .dist {
+            font-family: var(--font-mono); font-size: 11px; font-weight: 500;
+            color: var(--amber); letter-spacing: 0.5px;
+        }
+
+        .ping {
+            font-size: 12px; color: var(--gray-2); cursor: pointer;
+            background: none; border: none; font-family: var(--font-ui);
+            padding: 0;
+        }
+
+        .ping:hover { color: var(--orange); }
+
+        /* Bottom area */
+        .bottom-area {
+            padding: 16px 20px 12px; position: relative; z-index: 10;
+        }
+
+        /* Tab bar */
+        .tab-bar {
+            display: flex; justify-content: center; gap: 32px;
+            padding: 10px 0 8px;
+        }
+
+        .tab {
+            font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+            letter-spacing: 1.5px; text-transform: uppercase;
+            color: var(--gray-3); position: relative;
+            text-shadow: 0 1px 0 rgba(255,255,255,0.6);
+            cursor: pointer; padding-bottom: 6px;
+        }
+
+        .tab.active { color: var(--engrave); }
+
+        .tab.active::after {
+            content: ''; position: absolute;
+            bottom: 0; left: 50%; transform: translateX(-50%);
+            width: 5px; height: 5px; border-radius: 50%;
+            background: var(--orange);
+            box-shadow: 0 0 6px var(--orange);
+        }
+
+        /* Count badge */
+        .count {
+            font-family: var(--font-mono); font-size: 10px;
+            color: var(--gray-3); margin-left: 2px;
+            text-shadow: 0 1px 0 rgba(255,255,255,0.6);
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <header class="top-bar">
+            <div class="logo">
+                <span class="logo-text">Antenna</span>
+                <div class="led"></div>
+            </div>
+            <div class="range-pills">
+                <button class="pill">200m</button>
+                <button class="pill active">500m</button>
+                <button class="pill">1km</button>
+            </div>
+        </header>
+
+        <div class="screen-wrap">
+            <div class="screen-bezel">
+                <div class="screen">
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="card-name">Sarah Jenkins</div>
+                            <div class="card-bio">Industrial designer, building objects that bridge digital and physical</div>
+                        </div>
+                        <div class="card-right">
+                            <span class="dist">~150m</span>
+                            <button class="ping">Ping</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="card-name">Marcus V.</div>
+                            <div class="card-bio">RF engineer and amateur radio operator</div>
+                        </div>
+                        <div class="card-right">
+                            <span class="dist">~320m</span>
+                            <button class="ping">Ping</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="card-name">Priya Nair</div>
+                            <div class="card-bio">Fermentation scientist exploring bio-sonification</div>
+                        </div>
+                        <div class="card-right">
+                            <span class="dist">~480m</span>
+                            <button class="ping">Ping</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="card-name">Tom Richter</div>
+                            <div class="card-bio">Runs a community repair cafe, loves vintage electronics</div>
+                        </div>
+                        <div class="card-right">
+                            <span class="dist">~720m</span>
+                            <button class="ping">Ping</button>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="card-name">Lena Wu</div>
+                            <div class="card-bio">Interaction designer at a robotics startup</div>
+                        </div>
+                        <div class="card-right">
+                            <span class="dist">~910m</span>
+                            <button class="ping">Ping</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <nav class="bottom-area">
+            <div class="tab-bar">
+                <span class="tab">Profile</span>
+                <span class="tab active">Nearby</span>
+                <span class="tab">Matches</span>
+            </div>
+        </nav>
+    </div>
+</body></html>

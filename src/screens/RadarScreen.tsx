@@ -1,0 +1,306 @@
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  SafeAreaView,
+  ScrollView,
+  ActivityIndicator,
+} from "react-native";
+import { colors, fonts, radii, spacing } from "../config/theme";
+import RadarView from "../components/RadarView";
+import PersonCard from "../components/PersonCard";
+import { getCurrentLocation, startLocationUpdates, type LocationData } from "../services/location";
+import { updateLocation } from "../services/api";
+import { fetchNearbyPeople } from "../services/matching";
+import { respondToMatch } from "../services/api";
+import { getDeviceId } from "../services/deviceId";
+import { RANGE_OPTIONS, type NearbyPerson } from "../types";
+
+// Mock data for development
+const MOCK_PEOPLE: NearbyPerson[] = [
+  {
+    id: "1",
+    device_id: "d1",
+    display_name: "Marcus Chen",
+    line1: "Protocol engineer",
+    line2: "Obsessed with agent communication",
+    line3: "Building p2p networks",
+    emoji: "🛠",
+    distance_m: 120,
+    angle: Math.PI * 0.3,
+    match: {
+      id: "m1",
+      device_id_a: "me",
+      device_id_b: "d1",
+      reason: "你们都在折腾 agent 通信，他从硬件来你从设计来——聊聊肯定有意思",
+      score: 0.9,
+      status: "pending",
+      expires_at: new Date(Date.now() + 86400000).toISOString(),
+      created_at: new Date().toISOString(),
+    },
+  },
+  {
+    id: "2",
+    device_id: "d2",
+    display_name: "Sora Kim",
+    line1: "Interaction designer",
+    line2: "AI-native interfaces",
+    line3: null,
+    emoji: "🎨",
+    distance_m: 340,
+    angle: Math.PI * 1.2,
+  },
+  {
+    id: "3",
+    device_id: "d3",
+    display_name: "Luna Park",
+    line1: "Sound artist",
+    line2: "Generative music × spatial",
+    line3: "Live performances",
+    emoji: "🎵",
+    distance_m: 200,
+    angle: Math.PI * 0.8,
+  },
+  {
+    id: "4",
+    device_id: "d4",
+    display_name: "Alex Rivera",
+    line1: "Personal AI memory startup",
+    line2: "Digital context ownership",
+    line3: null,
+    emoji: "🧬",
+    distance_m: 480,
+    angle: Math.PI * 1.6,
+  },
+  {
+    id: "5",
+    device_id: "d5",
+    display_name: "Dev Patel",
+    line1: "Edge computing systems",
+    line2: "IoT sensor networks",
+    line3: "10ms inference latency",
+    emoji: "⚡",
+    distance_m: 700,
+    angle: Math.PI * 0.1,
+  },
+];
+
+export default function RadarScreen() {
+  const [selectedRange, setSelectedRange] = useState(1); // 500m default
+  const [people, setPeople] = useState<NearbyPerson[]>(MOCK_PEOPLE);
+  const [selectedPerson, setSelectedPerson] = useState<NearbyPerson | null>(
+    null
+  );
+  const [location, setLocation] = useState<LocationData | null>(null);
+  const [deviceId, setDeviceId] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    getDeviceId().then(setDeviceId);
+  }, []);
+
+  // Location updates
+  useEffect(() => {
+    if (!deviceId) return;
+
+    const stopUpdates = startLocationUpdates(async (loc) => {
+      setLocation(loc);
+      try {
+        await updateLocation(deviceId, loc.latitude, loc.longitude, loc.geohash);
+      } catch {
+        // Supabase not configured yet — ignore
+      }
+    });
+
+    return stopUpdates;
+  }, [deviceId]);
+
+  // Fetch nearby when location or range changes
+  const refreshNearby = useCallback(async () => {
+    if (!location || !deviceId) return;
+    setLoading(true);
+    try {
+      const result = await fetchNearbyPeople(
+        location.latitude,
+        location.longitude,
+        RANGE_OPTIONS[selectedRange].meters,
+        deviceId
+      );
+      if (result.length > 0) {
+        setPeople(result);
+      }
+      // Keep mock data if no results from server
+    } catch {
+      // Keep mock data on error
+    } finally {
+      setLoading(false);
+    }
+  }, [location, deviceId, selectedRange]);
+
+  useEffect(() => {
+    refreshNearby();
+  }, [refreshNearby]);
+
+  const handleSkip = async () => {
+    if (selectedPerson?.match) {
+      try {
+        await respondToMatch(selectedPerson.match.id, "skipped");
+      } catch {
+        // ignore
+      }
+    }
+    setSelectedPerson(null);
+  };
+
+  const handleConnect = async () => {
+    if (selectedPerson?.match) {
+      try {
+        await respondToMatch(selectedPerson.match.id, "accepted");
+      } catch {
+        // ignore
+      }
+    }
+    setSelectedPerson(null);
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      {/* Top plate */}
+      <View style={styles.topPlate}>
+        <View style={styles.headerCenter}>
+          <View style={styles.statusLed} />
+          <Text style={styles.title}>ANTENNA</Text>
+        </View>
+      </View>
+
+      {/* Range pills */}
+      <View style={styles.rangeStrip}>
+        {RANGE_OPTIONS.map((opt, i) => (
+          <TouchableOpacity
+            key={opt.label}
+            style={[styles.pill, selectedRange === i && styles.pillActive]}
+            onPress={() => setSelectedRange(i)}
+          >
+            <Text
+              style={[
+                styles.pillText,
+                selectedRange === i && styles.pillTextActive,
+              ]}
+            >
+              {opt.label}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {/* Radar */}
+      <View style={styles.radarAssembly}>
+        <RadarView
+          people={people}
+          selectedId={selectedPerson?.id ?? null}
+          onSelectPerson={setSelectedPerson}
+          radiusM={RANGE_OPTIONS[selectedRange].meters}
+        />
+      </View>
+
+      {/* Detail area */}
+      <ScrollView style={styles.detailArea} contentContainerStyle={styles.detailContent}>
+        {loading && (
+          <ActivityIndicator color={colors.orange} style={{ marginTop: 12 }} />
+        )}
+        {selectedPerson ? (
+          <PersonCard
+            person={selectedPerson}
+            onSkip={handleSkip}
+            onConnect={handleConnect}
+            onClose={() => setSelectedPerson(null)}
+          />
+        ) : (
+          <Text style={styles.hint}>Tap anyone on the radar</Text>
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: colors.aluBase,
+  },
+  topPlate: {
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 8,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  headerCenter: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  statusLed: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.green,
+    shadowColor: colors.green,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+  },
+  title: {
+    fontFamily: fonts.mono,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 1.5,
+    color: colors.engrave,
+    textTransform: "uppercase",
+  },
+  rangeStrip: {
+    flexDirection: "row",
+    justifyContent: "center",
+    gap: 4,
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+  },
+  pill: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: radii.full,
+  },
+  pillActive: {
+    backgroundColor: "rgba(0,0,0,0.08)",
+  },
+  pillText: {
+    fontFamily: fonts.mono,
+    fontSize: 10,
+    fontWeight: "600",
+    color: colors.engrave,
+    letterSpacing: 0.5,
+  },
+  pillTextActive: {
+    color: colors.orange,
+  },
+  radarAssembly: {
+    paddingHorizontal: 16,
+  },
+  detailArea: {
+    flex: 1,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+  },
+  detailContent: {
+    paddingBottom: 8,
+  },
+  hint: {
+    textAlign: "center",
+    paddingVertical: 20,
+    fontSize: 12,
+    color: colors.textFaint,
+  },
+});

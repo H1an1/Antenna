@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Antenna — Radar (Starlight)</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+:root{--bg:#f5f0eb;--surface:#eae4dd;--surface-2:#e0d9d1;--border:#cec6bb;--text:#2c2825;--text-2:#7a7168;--orange:#d4592a;--orange-dim:rgba(212,89,42,.1);--green:#2d9e4a;--mono:'JetBrains Mono',monospace;--sans:'Inter',sans-serif;--shell:#ddd5cb;--shell-highlight:#ebe5dd;--shell-shadow:#b8b0a5}
+body{background:var(--bg);color:var(--text);font-family:var(--sans);min-height:100dvh;display:flex;justify-content:center;overflow:hidden}
+.app{width:100%;max-width:420px;min-height:100dvh;display:flex;flex-direction:column;position:relative}
+
+/* Header */
+.header{padding:56px 20px 8px;display:flex;align-items:center;justify-content:space-between}
+.header h1{font-family:var(--mono);font-size:15px;font-weight:500;letter-spacing:2px;text-transform:uppercase}
+.status{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--green);letter-spacing:1px}
+.status-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green)}
+
+/* Range pills */
+.range-bar{padding:4px 20px 12px;display:flex;gap:8px}
+.pill{padding:6px 14px;border-radius:20px;font-family:var(--mono);font-size:11px;letter-spacing:.5px;background:var(--surface);border:1px solid var(--border);color:var(--text-2);cursor:pointer;transition:all .2s}
+.pill.active{background:var(--orange-dim);border-color:var(--orange);color:var(--orange)}
+
+/* Aluminum shell */
+.shell{margin:12px 16px;border-radius:24px;background:linear-gradient(145deg,var(--shell-highlight),var(--shell));box-shadow:0 2px 8px rgba(0,0,0,.08),inset 0 1px 0 rgba(255,255,255,.5);padding:16px;border:1px solid var(--shell-shadow)}
+.screen{background:#0e0f11;border-radius:50%;overflow:visible;aspect-ratio:1;position:relative;max-width:340px;margin:0 auto}
+
+/* Radar */
+.radar-wrap{position:relative;width:100%;height:100%}
+.radar{position:relative;width:100%;height:100%;border-radius:50%}
+.radar-ring{position:absolute;border-radius:50%;border:1px solid rgba(42,44,49,.6);top:50%;left:50%;transform:translate(-50%,-50%)}
+.ring-1{width:100%;height:100%}
+.ring-2{width:66%;height:66%}
+.ring-3{width:33%;height:33%}
+.crosshair-h,.crosshair-v{position:absolute;opacity:.2}
+.crosshair-h{width:100%;height:1px;top:50%;left:0;background:rgba(42,44,49,.8)}
+.crosshair-v{width:1px;height:100%;left:50%;top:0;background:rgba(42,44,49,.8)}
+
+/* Sweep */
+.sweep{position:absolute;top:50%;left:50%;width:50%;height:2px;transform-origin:left center;animation:sweep 4s linear infinite}
+.sweep::before{content:'';position:absolute;top:-60px;left:0;width:100%;height:120px;background:conic-gradient(from -10deg,transparent,rgba(227,93,37,.08) 20deg,transparent 30deg);transform-origin:left center}
+.sweep-line{width:100%;height:1px;background:linear-gradient(90deg,var(--orange),transparent);opacity:.6}
+@keyframes sweep{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+
+/* Center dot */
+.center-me{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:10px;height:10px;border-radius:50%;background:var(--orange);box-shadow:0 0 12px rgba(227,93,37,.5);z-index:5}
+
+/* Avatars on radar */
+.avatar-pin{position:absolute;transform:translate(-50%,-50%);cursor:pointer;z-index:10;transition:transform .2s}
+.avatar-pin:hover{transform:translate(-50%,-50%) scale(1.15)}
+.avatar-circle{width:40px;height:40px;border-radius:50%;background:#1e2025;border:2px solid #2a2c31;display:flex;align-items:center;justify-content:center;font-size:18px;transition:border-color .2s}
+.avatar-pin.selected .avatar-circle{border-color:var(--orange)}
+.avatar-label{font-family:var(--mono);font-size:9px;color:#8a8d93;text-align:center;margin-top:2px;white-space:nowrap;letter-spacing:.3px}
+
+/* Detail card (bottom sheet) */
+.detail-sheet{position:fixed;bottom:80px;left:50%;transform:translateX(-50%) translateY(100%);width:100%;max-width:420px;background:#fff;border-top:1px solid var(--border);border-radius:16px 16px 0 0;padding:20px;transition:transform .3s ease;z-index:20}
+.detail-sheet.open{transform:translateX(-50%) translateY(0)}
+.detail-header{display:flex;align-items:center;gap:12px;margin-bottom:12px}
+.detail-avatar{width:44px;height:44px;border-radius:50%;background:var(--surface);display:flex;align-items:center;justify-content:center;font-size:22px}
+.detail-name{font-weight:600;font-size:16px}
+.detail-dist{font-family:var(--mono);font-size:11px;color:var(--text-2)}
+.detail-reason{font-size:13px;color:var(--text-2);line-height:1.6;margin-bottom:14px}
+.detail-reason em{font-style:normal;color:var(--orange)}
+.detail-tags{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.tag{padding:3px 10px;border-radius:12px;font-size:11px;font-family:var(--mono);background:var(--surface);border:1px solid var(--border);color:var(--text-2)}
+.detail-actions{display:flex;gap:8px}
+.btn{flex:1;padding:11px;border-radius:10px;font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:.5px;text-align:center;cursor:pointer;border:none;transition:all .15s}
+.btn-skip{background:var(--surface);color:var(--text-2)}
+.btn-connect{background:var(--orange);color:#fff}
+
+/* Tab bar */
+.tab-bar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:420px;background:#fff;border-top:1px solid var(--border);display:flex;padding:10px 0 28px;z-index:30}
+.tab{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;font-family:var(--mono);letter-spacing:.5px;color:var(--text-2);cursor:pointer}
+.tab.active{color:var(--orange)}
+.tab svg{width:20px;height:20px}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <h1>Antenna</h1>
+    <div class="status"><span class="status-dot"></span>LIVE</div>
+  </div>
+  <div class="range-bar">
+    <div class="pill">100m</div>
+    <div class="pill active">500m</div>
+    <div class="pill">1km</div>
+    <div class="pill">5km</div>
+  </div>
+
+  <div class="shell">
+  <div class="screen">
+  <div class="radar-wrap">
+    <div class="radar">
+      <div class="radar-ring ring-1"></div>
+      <div class="radar-ring ring-2"></div>
+      <div class="radar-ring ring-3"></div>
+      <div class="crosshair-h"></div>
+      <div class="crosshair-v"></div>
+      <div class="sweep"><div class="sweep-line"></div></div>
+      <div class="center-me"></div>
+
+      <!-- People pinned by % from center -->
+      <div class="avatar-pin" data-id="0" style="top:28%;left:62%">
+        <div class="avatar-circle">🛠</div>
+        <div class="avatar-label">Marcus</div>
+      </div>
+      <div class="avatar-pin" data-id="1" style="top:52%;left:24%">
+        <div class="avatar-circle">🎨</div>
+        <div class="avatar-label">Sora</div>
+      </div>
+      <div class="avatar-pin" data-id="2" style="top:72%;left:68%">
+        <div class="avatar-circle">🧬</div>
+        <div class="avatar-label">Alex</div>
+      </div>
+      <div class="avatar-pin" data-id="3" style="top:38%;left:35%">
+        <div class="avatar-circle">🎵</div>
+        <div class="avatar-label">Yuki</div>
+      </div>
+      <div class="avatar-pin" data-id="4" style="top:60%;left:42%">
+        <div class="avatar-circle">📐</div>
+        <div class="avatar-label">Sarah</div>
+      </div>
+    </div>
+  </div>
+  </div>
+  </div>
+
+  <!-- Detail sheet -->
+  <div class="detail-sheet" id="detail">
+    <div class="detail-header">
+      <div class="detail-avatar" id="d-avatar"></div>
+      <div>
+        <div class="detail-name" id="d-name"></div>
+        <div class="detail-dist" id="d-dist"></div>
+      </div>
+    </div>
+    <div class="detail-reason" id="d-reason"></div>
+    <div class="detail-tags" id="d-tags"></div>
+    <div class="detail-actions">
+      <button class="btn btn-skip" onclick="closeDetail()">Skip</button>
+      <button class="btn btn-connect">Connect</button>
+    </div>
+  </div>
+
+  <div class="tab-bar">
+    <div class="tab active">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+      Radar
+    </div>
+    <div class="tab">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Profile
+    </div>
+    <div class="tab">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+      Matches
+    </div>
+  </div>
+</div>
+
+<script>
+const people = [
+  {emoji:'🛠',name:'Marcus Chen',dist:'~120m · 3 min ago',reason:'你们都在搞 <em>agent 协议</em>，他从 mesh networking 那边来，你从 companion AI 这边来——聊聊肯定有火花 🔥',tags:['mesh-net','rust','p2p']},
+  {emoji:'🎨',name:'Sora Kim',dist:'~340m · 8 min ago',reason:'她在研究 <em>AI-native UI</em>，你做设计系统——这种交集太少见了，worth a chat',tags:['design','gen-ui','figma']},
+  {emoji:'🧬',name:'Alex Rivera',dist:'~480m · 12 min ago',reason:'也在做 <em>personal AI memory</em>，跟你的 embodied companion 是同一个问题的不同切入点',tags:['memory','startup','rag']},
+  {emoji:'🎵',name:'Yuki Tanaka',dist:'~200m · 5 min ago',reason:'做 <em>music AI</em> 的，你不是对合成器感兴趣吗？她 audio ML 很强',tags:['audio-ml','ableton','python']},
+  {emoji:'📐',name:'Sarah Park',dist:'~310m · 9 min ago',reason:'工业设计师在做 <em>AI 硬件</em>，她的实体设计 + 你的数字 companion = 全栈 embodiment',tags:['hardware','industrial','cad']}
+];
+const pins=document.querySelectorAll('.avatar-pin');
+const sheet=document.getElementById('detail');
+let openId=null;
+pins.forEach(p=>{
+  p.addEventListener('click',()=>{
+    const id=+p.dataset.id;
+    if(openId===id){closeDetail();return}
+    openId=id;
+    const d=people[id];
+    document.getElementById('d-avatar').textContent=d.emoji;
+    document.getElementById('d-name').textContent=d.name;
+    document.getElementById('d-dist').textContent=d.dist;
+    document.getElementById('d-reason').innerHTML=d.reason;
+    document.getElementById('d-tags').innerHTML=d.tags.map(t=>`<span class="tag">${t}</span>`).join('');
+    pins.forEach(x=>x.classList.remove('selected'));
+    p.classList.add('selected');
+    sheet.classList.add('open');
+  });
+});
+function closeDetail(){sheet.classList.remove('open');pins.forEach(x=>x.classList.remove('selected'));openId=null}
+document.querySelector('.radar-wrap').addEventListener('click',e=>{if(!e.target.closest('.avatar-pin'))closeDetail()});
+</script>
+</body>
+</html>

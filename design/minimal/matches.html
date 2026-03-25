@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Antenna - Matches (Minimal)</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+
+        :root {
+            --screen-dark: #121416;
+            --orange: #e35d25;
+            --amber: #ff9d00;
+            --white: #f0f2f5;
+            --gray-1: #c8cdd3;
+            --gray-2: #8b95a1;
+            --gray-3: #555b61;
+            --gray-4: #2a2d31;
+            --alu-base: #cdd1d5;
+            --alu-dark: #a8adb3;
+            --alu-light: #e8ebed;
+            --engrave: #555b61;
+            --font-ui: 'Inter', -apple-system, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+        body {
+            background: var(--alu-base);
+            display: flex; justify-content: center; align-items: center;
+            min-height: 100vh; font-family: var(--font-ui);
+        }
+
+        .app {
+            width: 100%; max-width: 460px; height: 100dvh;
+            background: linear-gradient(160deg, var(--alu-light) 0%, var(--alu-base) 40%, var(--alu-dark) 100%);
+            display: flex; flex-direction: column; position: relative;
+            box-shadow: 0 0 50px rgba(0,0,0,0.3);
+        }
+
+        .app::before {
+            content: ""; position: absolute; inset: 0;
+            background-image: url('data:image/svg+xml;utf8,<svg viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency="0.8" numOctaves="3" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(%23n)" opacity="0.06"/></svg>');
+            pointer-events: none; z-index: 0;
+        }
+
+        /* Top bar */
+        .top-bar {
+            padding: 20px 20px 16px; display: flex; align-items: center;
+            justify-content: center; gap: 10px; position: relative; z-index: 10;
+        }
+
+        .page-title {
+            font-family: var(--font-mono); font-size: 13px; font-weight: 700;
+            letter-spacing: 2px; text-transform: uppercase;
+            color: var(--engrave);
+            text-shadow: 0 1px 0 rgba(255,255,255,0.7);
+        }
+
+        .badge {
+            font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+            color: var(--orange); background: rgba(227,93,37,0.1);
+            padding: 2px 8px; border-radius: 10px;
+            letter-spacing: 0.5px;
+        }
+
+        /* Screen area */
+        .screen-wrap {
+            flex: 1; padding: 0 14px; position: relative; z-index: 5;
+            display: flex; flex-direction: column; min-height: 0;
+        }
+
+        .screen-bezel {
+            flex: 1; border-radius: 18px;
+            background: var(--alu-base); padding: 5px;
+            box-shadow: inset 4px 4px 10px rgba(0,0,0,0.18),
+                        inset -4px -4px 10px rgba(255,255,255,0.7);
+            display: flex; flex-direction: column; min-height: 0;
+        }
+
+        .screen {
+            flex: 1; border-radius: 14px;
+            background: var(--screen-dark);
+            overflow-y: auto; overflow-x: hidden;
+            box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
+            padding: 16px 14px;
+            display: flex; flex-direction: column; gap: 12px;
+        }
+
+        /* Match cards */
+        .match-card {
+            padding: 16px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid rgba(255,255,255,0.04);
+            border-radius: 12px;
+        }
+
+        .match-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 10px;
+        }
+
+        .match-names {
+            display: flex; align-items: center; gap: 8px;
+        }
+
+        .name { font-size: 14px; font-weight: 600; color: var(--white); }
+        .arrow { font-size: 12px; color: var(--gray-3); }
+
+        .strength {
+            font-family: var(--font-mono); font-size: 11px; font-weight: 700;
+            color: var(--amber);
+        }
+
+        .match-reason {
+            font-size: 13px; color: var(--gray-2); line-height: 1.6;
+            margin-bottom: 14px;
+        }
+
+        .match-reason strong {
+            color: var(--white); font-weight: 600;
+        }
+
+        .match-bar {
+            height: 2px; border-radius: 1px; background: var(--gray-4);
+            margin-bottom: 14px; overflow: hidden;
+        }
+
+        .match-bar-fill {
+            height: 100%; border-radius: 1px;
+            background: linear-gradient(90deg, var(--orange), var(--amber));
+        }
+
+        .match-actions {
+            display: flex; align-items: center; justify-content: flex-end; gap: 16px;
+        }
+
+        .action-skip {
+            font-size: 13px; color: var(--gray-3); cursor: pointer;
+            background: none; border: none; font-family: var(--font-ui);
+            padding: 0;
+        }
+
+        .action-accept {
+            font-size: 13px; font-weight: 600; color: var(--orange);
+            cursor: pointer; background: none; border: none;
+            font-family: var(--font-ui); padding: 0;
+        }
+
+        /* Tab bar */
+        .bottom-area {
+            padding: 16px 20px 12px; position: relative; z-index: 10;
+        }
+
+        .tab-bar {
+            display: flex; justify-content: center; gap: 32px;
+            padding: 10px 0 8px;
+        }
+
+        .tab {
+            font-family: var(--font-mono); font-size: 10px; font-weight: 700;
+            letter-spacing: 1.5px; text-transform: uppercase;
+            color: var(--gray-3); position: relative;
+            text-shadow: 0 1px 0 rgba(255,255,255,0.6);
+            cursor: pointer; padding-bottom: 6px;
+        }
+
+        .tab.active { color: var(--engrave); }
+
+        .tab.active::after {
+            content: ''; position: absolute;
+            bottom: 0; left: 50%; transform: translateX(-50%);
+            width: 5px; height: 5px; border-radius: 50%;
+            background: var(--orange);
+            box-shadow: 0 0 6px var(--orange);
+        }
+    </style>
+</head>
+<body>
+    <div class="app">
+        <header class="top-bar">
+            <span class="page-title">Matches</span>
+            <span class="badge">3</span>
+        </header>
+
+        <div class="screen-wrap">
+            <div class="screen-bezel">
+                <div class="screen">
+                    <div class="match-card">
+                        <div class="match-header">
+                            <div class="match-names">
+                                <span class="name">You</span>
+                                <span class="arrow">&harr;</span>
+                                <span class="name">Sarah Jenkins</span>
+                            </div>
+                            <span class="strength">92%</span>
+                        </div>
+                        <div class="match-reason">You're both building <strong>hardware tools for creative expression</strong> &mdash; Sarah's industrial design + your synth modules could make something beautiful.</div>
+                        <div class="match-bar"><div class="match-bar-fill" style="width: 92%"></div></div>
+                        <div class="match-actions">
+                            <button class="action-skip">Skip</button>
+                            <button class="action-accept">Accept</button>
+                        </div>
+                    </div>
+
+                    <div class="match-card">
+                        <div class="match-header">
+                            <div class="match-names">
+                                <span class="name">You</span>
+                                <span class="arrow">&harr;</span>
+                                <span class="name">Marcus V.</span>
+                            </div>
+                            <span class="strength">85%</span>
+                        </div>
+                        <div class="match-reason">Marcus's <strong>RF engineering background</strong> is exactly what your synth project needs for wireless MIDI &mdash; and he's curious about generative music.</div>
+                        <div class="match-bar"><div class="match-bar-fill" style="width: 85%"></div></div>
+                        <div class="match-actions">
+                            <button class="action-skip">Skip</button>
+                            <button class="action-accept">Accept</button>
+                        </div>
+                    </div>
+
+                    <div class="match-card">
+                        <div class="match-header">
+                            <div class="match-names">
+                                <span class="name">You</span>
+                                <span class="arrow">&harr;</span>
+                                <span class="name">Priya Nair</span>
+                            </div>
+                            <span class="strength">71%</span>
+                        </div>
+                        <div class="match-reason">Priya is running a <strong>fermentation lab</strong> and exploring bio-sonification &mdash; turning microbial activity into sound. Your shared love of fermentation + your audio skills = magic.</div>
+                        <div class="match-bar"><div class="match-bar-fill" style="width: 71%"></div></div>
+                        <div class="match-actions">
+                            <button class="action-skip">Skip</button>
+                            <button class="action-accept">Accept</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <nav class="bottom-area">
+            <div class="tab-bar">
+                <span class="tab">Profile</span>
+                <span class="tab">Nearby</span>
+                <span class="tab active">Matches</span>
+            </div>
+        </nav>
+    </div>
+</body></html>
