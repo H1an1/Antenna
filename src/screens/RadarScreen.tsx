@@ -16,6 +16,7 @@ import { updateLocation } from "../services/api";
 import { fetchNearbyPeople } from "../services/matching";
 import { respondToMatch } from "../services/api";
 import { getDeviceId } from "../services/deviceId";
+import { setDeviceHeader } from "../config/supabase";
 import { RANGE_OPTIONS, type NearbyPerson } from "../types";
 
 // Mock data for development
@@ -98,7 +99,10 @@ export default function RadarScreen() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    getDeviceId().then(setDeviceId);
+    getDeviceId().then((id) => {
+      setDeviceId(id);
+      setDeviceHeader(id);
+    });
   }, []);
 
   // Location updates

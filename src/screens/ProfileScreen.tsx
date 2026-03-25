@@ -14,6 +14,7 @@ import {
 } from "react-native";
 import { colors, fonts, radii, spacing } from "../config/theme";
 import { getDeviceId } from "../services/deviceId";
+import { setDeviceHeader } from "../config/supabase";
 import { updateProfile } from "../services/api";
 
 export default function ProfileScreen() {
@@ -27,6 +28,7 @@ export default function ProfileScreen() {
   useEffect(() => {
     getDeviceId().then(async (id) => {
       setDeviceId(id);
+      setDeviceHeader(id);
       // Load existing profile from Supabase
       try {
         const { getProfile } = await import("../services/api");
