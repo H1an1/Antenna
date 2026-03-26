@@ -45,7 +45,7 @@ export default function RadarView({
 
   const toRadarPos = (person: NearbyPerson) => {
     const normalizedDist = Math.min(person.distance_m / radiusM, 0.85);
-    const r = normalizedDist * 0.35;
+    const r = normalizedDist * 0.33;
     const x = 0.5 + r * Math.cos(person.angle);
     const y = 0.5 - r * Math.sin(person.angle);
     return { x, y };
@@ -131,7 +131,7 @@ export default function RadarView({
 const styles = StyleSheet.create({
   bezel: {
     aspectRatio: 1,
-    maxWidth: 340,
+    maxWidth: 380,
     width: "100%",
     alignSelf: "center",
     borderRadius: 20,
