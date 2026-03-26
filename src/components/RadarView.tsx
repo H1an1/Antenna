@@ -196,7 +196,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     borderRadius: 9999,
     borderWidth: 1,
-    borderColor: "rgba(180, 165, 140, 0.25)",
+    borderColor: "rgba(180, 165, 140, 0.4)",
   },
   ring1: { width: "30%", height: "30%" },
   ring2: { width: "55%", height: "55%" },
@@ -204,7 +204,7 @@ const styles = StyleSheet.create({
     width: "80%",
     height: "80%",
     borderStyle: "dashed",
-    opacity: 0.5,
+    opacity: 0.7,
   },
   crosshairV: {
     position: "absolute",
