@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@expo/cli": "^55.0.18",
+    "@expo/metro-runtime": "~55.0.6",
     "@react-native-async-storage/async-storage": "^3.0.1",
     "@react-navigation/bottom-tabs": "^7.15.7",
     "@react-navigation/native": "^7.2.0",

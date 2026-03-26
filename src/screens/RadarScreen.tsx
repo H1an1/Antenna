@@ -173,10 +173,16 @@ export default function RadarScreen() {
     <SafeAreaView style={styles.container}>
       {/* Top plate */}
       <View style={styles.topPlate}>
+        <TouchableOpacity style={styles.smallButton} activeOpacity={0.7}>
+          <Text style={styles.smallButtonIcon}>←</Text>
+        </TouchableOpacity>
         <View style={styles.headerCenter}>
           <View style={styles.statusLed} />
           <Text style={styles.title}>ANTENNA</Text>
         </View>
+        <TouchableOpacity style={styles.smallButton} activeOpacity={0.7}>
+          <Text style={styles.smallButtonIcon}>⚙</Text>
+        </TouchableOpacity>
       </View>
 
       {/* Range pills */}
@@ -239,8 +245,25 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 8,
     flexDirection: "row",
-    justifyContent: "center",
+    justifyContent: "space-between",
     alignItems: "center",
+  },
+  smallButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.aluLight,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 4, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  smallButtonIcon: {
+    fontSize: 16,
+    color: colors.engrave,
   },
   headerCenter: {
     flexDirection: "row",

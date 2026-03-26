@@ -1,5 +1,5 @@
-import React from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import React, { useEffect, useRef } from "react";
+import { View, Text, TouchableOpacity, StyleSheet, Animated } from "react-native";
 import { colors, fonts } from "../config/theme";
 
 interface PersonPinProps {
@@ -23,6 +23,30 @@ function getSignalStrength(m: number): "strong" | "medium" | "weak" {
   return "weak";
 }
 
+const SIGNAL_CONFIG = {
+  strong: {
+    pulseDuration: 2500,
+    pulseMinOpacity: 0.7,
+    borderColor: "#bab1a3",
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+  },
+  medium: {
+    pulseDuration: 3500,
+    pulseMinOpacity: 0.7,
+    borderColor: colors.border,
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+  },
+  weak: {
+    pulseDuration: 4500,
+    pulseMinOpacity: 0.7,
+    borderColor: "#d4ccc0",
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+  },
+};
+
 export default function PersonPin({
   emoji,
   distance_m,
@@ -32,7 +56,27 @@ export default function PersonPin({
   y,
 }: PersonPinProps) {
   const signal = getSignalStrength(distance_m);
-  const opacity = signal === "strong" ? 1 : signal === "medium" ? 0.85 : 0.65;
+  const config = SIGNAL_CONFIG[signal];
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    const animation = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: config.pulseMinOpacity,
+          duration: config.pulseDuration / 2,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: config.pulseDuration / 2,
+          useNativeDriver: true,
+        }),
+      ])
+    );
+    animation.start();
+    return () => animation.stop();
+  }, [signal]);
 
   return (
     <TouchableOpacity
@@ -41,21 +85,25 @@ export default function PersonPin({
         {
           left: `${x * 100}%` as unknown as number,
           top: `${y * 100}%` as unknown as number,
-          opacity,
         },
       ]}
       onPress={onPress}
       activeOpacity={0.7}
     >
-      <View
+      <Animated.View
         style={[
           styles.dot,
-          isActive && styles.dotActive,
-          signal === "strong" && styles.dotStrong,
+          {
+            borderColor: isActive ? colors.orange : config.borderColor,
+            shadowColor: isActive ? colors.orange : "rgba(160,140,110,1)",
+            shadowOpacity: isActive ? 0.3 : config.shadowOpacity,
+            shadowRadius: isActive ? 6 : config.shadowRadius,
+            opacity: pulseAnim,
+          },
         ]}
       >
         <Text style={styles.emoji}>{emoji}</Text>
-      </View>
+      </Animated.View>
       <Text style={styles.distance}>{formatDistance(distance_m)}</Text>
     </TouchableOpacity>
   );
@@ -66,7 +114,7 @@ const styles = StyleSheet.create({
     position: "absolute",
     alignItems: "center",
     transform: [{ translateX: -17 }, { translateY: -17 }],
-    gap: 2,
+    gap: 3,
   },
   dot: {
     width: 34,
@@ -74,22 +122,9 @@ const styles = StyleSheet.create({
     borderRadius: 17,
     backgroundColor: colors.white,
     borderWidth: 1.5,
-    borderColor: colors.border,
     alignItems: "center",
     justifyContent: "center",
-  },
-  dotActive: {
-    borderColor: colors.orange,
-    shadowColor: colors.orange,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-  },
-  dotStrong: {
-    shadowColor: colors.shellShadow,
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
   },
   emoji: {
     fontSize: 16,
