@@ -44,8 +44,8 @@ export default function RadarView({
   });
 
   const toRadarPos = (person: NearbyPerson) => {
-    const normalizedDist = Math.min(person.distance_m / radiusM, 0.95);
-    const r = normalizedDist * 0.45;
+    const normalizedDist = Math.min(person.distance_m / radiusM, 0.85);
+    const r = normalizedDist * 0.35;
     const x = 0.5 + r * Math.cos(person.angle);
     const y = 0.5 - r * Math.sin(person.angle);
     return { x, y };
