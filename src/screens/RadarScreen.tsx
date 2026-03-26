@@ -8,6 +8,8 @@ import {
   ScrollView,
   ActivityIndicator,
 } from "react-native";
+import Svg, { Line, Polyline, Circle, Path } from "react-native-svg";
+import { LinearGradient } from "expo-linear-gradient";
 import { colors, fonts, radii, spacing } from "../config/theme";
 import RadarView from "../components/RadarView";
 import PersonCard from "../components/PersonCard";
@@ -88,6 +90,63 @@ const MOCK_PEOPLE: NearbyPerson[] = [
   },
 ];
 
+function BackArrowIcon() {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+      <Line
+        x1={19} y1={12} x2={5} y2={12}
+        stroke={colors.engrave}
+        strokeWidth={2.5}
+        strokeLinecap="round"
+      />
+      <Polyline
+        points="12 19 5 12 12 5"
+        stroke={colors.engrave}
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    </Svg>
+  );
+}
+
+function GearIcon() {
+  return (
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none">
+      <Circle
+        cx={12} cy={12} r={3}
+        stroke={colors.engrave}
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"
+        stroke={colors.engrave}
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </Svg>
+  );
+}
+
+function SmallButton({ children }: { children: React.ReactNode }) {
+  return (
+    <TouchableOpacity style={styles.smallButton} activeOpacity={0.7}>
+      <LinearGradient
+        colors={[colors.aluLight, colors.aluDark]}
+        start={{ x: 0.15, y: 0.15 }}
+        end={{ x: 0.85, y: 0.85 }}
+        style={styles.smallButtonGradient}
+      >
+        {children}
+      </LinearGradient>
+    </TouchableOpacity>
+  );
+}
+
 export default function RadarScreen() {
   const [selectedRange, setSelectedRange] = useState(1); // 500m default
   const [people, setPeople] = useState<NearbyPerson[]>(MOCK_PEOPLE);
@@ -135,7 +194,6 @@ export default function RadarScreen() {
       if (result.length > 0) {
         setPeople(result);
       }
-      // Keep mock data if no results from server
     } catch {
       // Keep mock data on error
     } finally {
@@ -173,16 +231,16 @@ export default function RadarScreen() {
     <SafeAreaView style={styles.container}>
       {/* Top plate */}
       <View style={styles.topPlate}>
-        <TouchableOpacity style={styles.smallButton} activeOpacity={0.7}>
-          <Text style={styles.smallButtonIcon}>←</Text>
-        </TouchableOpacity>
+        <SmallButton>
+          <BackArrowIcon />
+        </SmallButton>
         <View style={styles.headerCenter}>
           <View style={styles.statusLed} />
           <Text style={styles.title}>ANTENNA</Text>
         </View>
-        <TouchableOpacity style={styles.smallButton} activeOpacity={0.7}>
-          <Text style={styles.smallButtonIcon}>⚙</Text>
-        </TouchableOpacity>
+        <SmallButton>
+          <GearIcon />
+        </SmallButton>
       </View>
 
       {/* Range pills */}
@@ -252,18 +310,20 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.aluLight,
-    alignItems: "center",
-    justifyContent: "center",
+    overflow: "hidden",
+    // Neumorphic shadows
     shadowColor: "#000",
     shadowOffset: { width: 4, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 4,
   },
-  smallButtonIcon: {
-    fontSize: 16,
-    color: colors.engrave,
+  smallButtonGradient: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
   },
   headerCenter: {
     flexDirection: "row",

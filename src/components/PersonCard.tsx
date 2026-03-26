@@ -6,7 +6,7 @@ import {
   StyleSheet,
   Animated,
 } from "react-native";
-import { colors, fonts, radii, spacing } from "../config/theme";
+import { colors, fonts, radii } from "../config/theme";
 import type { NearbyPerson } from "../types";
 
 interface PersonCardProps {

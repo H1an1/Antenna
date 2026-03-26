@@ -4,8 +4,8 @@ import {
   StyleSheet,
   Animated,
   Easing,
-  Dimensions,
 } from "react-native";
+import { LinearGradient } from "expo-linear-gradient";
 import { colors } from "../config/theme";
 import PersonPin from "./PersonPin";
 import type { NearbyPerson } from "../types";
@@ -43,19 +43,22 @@ export default function RadarView({
     outputRange: ["0deg", "360deg"],
   });
 
-  // Convert distance + angle to x,y position on radar (0-1 range)
   const toRadarPos = (person: NearbyPerson) => {
     const normalizedDist = Math.min(person.distance_m / radiusM, 0.95);
-    const r = normalizedDist * 0.45; // max 45% from center
+    const r = normalizedDist * 0.45;
     const x = 0.5 + r * Math.cos(person.angle);
-    const y = 0.5 - r * Math.sin(person.angle); // y inverted
+    const y = 0.5 - r * Math.sin(person.angle);
     return { x, y };
   };
 
   return (
     <View style={styles.bezel}>
+      {/* Inset shadow overlay — simulates recessed bezel */}
+      <View style={styles.bezelInsetTop} pointerEvents="none" />
+      <View style={styles.bezelInsetBottom} pointerEvents="none" />
+
       <View style={styles.glass}>
-        {/* Radial glow */}
+        {/* Radial glow — warm amber center */}
         <View style={styles.glow} />
 
         {/* Concentric rings */}
@@ -69,13 +72,24 @@ export default function RadarView({
         <View style={styles.crosshairV} />
         <View style={styles.crosshairH} />
 
-        {/* Sweep animation */}
+        {/* Sweep animation — gradient wedge */}
         <Animated.View
           style={[
-            styles.sweep,
+            styles.sweepContainer,
             { transform: [{ rotate: sweepRotation }] },
           ]}
-        />
+        >
+          <LinearGradient
+            colors={[
+              "rgba(200, 140, 40, 0.08)",
+              "rgba(200, 140, 40, 0.03)",
+              "transparent",
+            ]}
+            start={{ x: 0.5, y: 0.5 }}
+            end={{ x: 1, y: 0 }}
+            style={styles.sweepGradient}
+          />
+        </Animated.View>
 
         {/* Center dot (you) */}
         <View style={styles.centerDot} />
@@ -95,6 +109,20 @@ export default function RadarView({
             />
           );
         })}
+
+        {/* Glass reflection overlay */}
+        <LinearGradient
+          colors={[
+            "rgba(255,255,255,0.4)",
+            "transparent",
+            "rgba(255,250,240,0.1)",
+          ]}
+          locations={[0, 0.4, 1]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={styles.glassReflection}
+          pointerEvents="none"
+        />
       </View>
     </View>
   );
@@ -109,11 +137,40 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     backgroundColor: colors.aluBase,
     padding: 6,
-    // Neumorphic inset shadow
+    // Outer shadow
     shadowColor: "#000",
-    shadowOffset: { width: 6, height: 6 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 10,
+    position: "relative",
+  },
+  bezelInsetTop: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 20,
+    borderWidth: 2,
+    borderTopColor: "rgba(0,0,0,0.12)",
+    borderLeftColor: "rgba(0,0,0,0.12)",
+    borderBottomColor: "rgba(255,255,255,0.5)",
+    borderRightColor: "rgba(255,255,255,0.5)",
+    zIndex: 30,
+  },
+  bezelInsetBottom: {
+    position: "absolute",
+    top: 2,
+    left: 2,
+    right: 2,
+    bottom: 2,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderTopColor: "rgba(0,0,0,0.06)",
+    borderLeftColor: "rgba(0,0,0,0.06)",
+    borderBottomColor: "rgba(255,255,255,0.3)",
+    borderRightColor: "rgba(255,255,255,0.3)",
+    zIndex: 30,
   },
   glass: {
     flex: 1,
@@ -121,11 +178,13 @@ const styles = StyleSheet.create({
     backgroundColor: colors.radarScreen,
     overflow: "hidden",
     position: "relative",
+    // Inner shadow via border
+    borderWidth: 1,
+    borderColor: "rgba(160,140,110,0.2)",
   },
   glow: {
     ...StyleSheet.absoluteFillObject,
     backgroundColor: "transparent",
-    // Warm center glow — approximated
     opacity: 0.6,
   },
   ringsContainer: {
@@ -161,16 +220,15 @@ const styles = StyleSheet.create({
     top: "50%",
     backgroundColor: "rgba(160, 140, 110, 0.12)",
   },
-  sweep: {
+  sweepContainer: {
     ...StyleSheet.absoluteFillObject,
-    // Conic gradient approximation — a semi-transparent wedge
-    backgroundColor: "transparent",
-    borderTopColor: "rgba(200, 140, 40, 0.06)",
-    borderRightColor: "transparent",
-    borderBottomColor: "transparent",
-    borderLeftColor: "transparent",
-    borderWidth: 170,
-    borderRadius: 9999,
+  },
+  sweepGradient: {
+    position: "absolute",
+    top: 0,
+    left: "50%",
+    width: "50%",
+    height: "50%",
   },
   centerDot: {
     position: "absolute",
@@ -187,5 +245,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.5,
     shadowRadius: 6,
     zIndex: 5,
+  },
+  glassReflection: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 20,
   },
 });

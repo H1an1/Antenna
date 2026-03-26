@@ -7,7 +7,6 @@ interface PersonPinProps {
   distance_m: number;
   isActive: boolean;
   onPress: () => void;
-  // Position as percentage of radar diameter
   x: number; // 0-1
   y: number; // 0-1
 }
@@ -34,7 +33,7 @@ const SIGNAL_CONFIG = {
   medium: {
     pulseDuration: 3500,
     pulseMinOpacity: 0.7,
-    borderColor: colors.border,
+    borderColor: colors.borderWarm,
     shadowOpacity: 0.15,
     shadowRadius: 6,
   },
@@ -97,7 +96,7 @@ export default function PersonPin({
             borderColor: isActive ? colors.orange : config.borderColor,
             shadowColor: isActive ? colors.orange : "rgba(160,140,110,1)",
             shadowOpacity: isActive ? 0.3 : config.shadowOpacity,
-            shadowRadius: isActive ? 6 : config.shadowRadius,
+            shadowRadius: isActive ? 12 : config.shadowRadius,
             opacity: pulseAnim,
           },
         ]}
@@ -120,7 +119,7 @@ const styles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: colors.white,
+    backgroundColor: "#ffffff",
     borderWidth: 1.5,
     alignItems: "center",
     justifyContent: "center",
