@@ -32,7 +32,7 @@ const MOCK_PEOPLE: NearbyPerson[] = [
     line3: "Building p2p networks",
     emoji: "🛠",
     distance_m: 120,
-    angle: Math.PI * 0.45,
+    angle: Math.PI * 0.3,
     match: {
       id: "m1",
       device_id_a: "me",
@@ -53,7 +53,7 @@ const MOCK_PEOPLE: NearbyPerson[] = [
     line3: null,
     emoji: "🎨",
     distance_m: 340,
-    angle: Math.PI * 1.25,
+    angle: Math.PI * 0.7,
   },
   {
     id: "3",
@@ -64,7 +64,7 @@ const MOCK_PEOPLE: NearbyPerson[] = [
     line3: "Live performances",
     emoji: "🎵",
     distance_m: 200,
-    angle: Math.PI * 1.7,
+    angle: Math.PI * 1.1,
   },
   {
     id: "4",
@@ -75,7 +75,7 @@ const MOCK_PEOPLE: NearbyPerson[] = [
     line3: null,
     emoji: "🧬",
     distance_m: 480,
-    angle: Math.PI * 0.85,
+    angle: Math.PI * 1.5,
   },
   {
     id: "5",
@@ -86,7 +86,7 @@ const MOCK_PEOPLE: NearbyPerson[] = [
     line3: "10ms inference latency",
     emoji: "⚡",
     distance_m: 700,
-    angle: Math.PI * 1.45,
+    angle: Math.PI * 1.9,
   },
 ];
 
