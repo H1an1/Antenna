@@ -1,10 +1,16 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 
+// ─── Built-in Supabase config (shared backend, zero config) ─────────
+
+const BUILTIN_SUPABASE_URL = "https://bcudjloikmpcqwcptuyd.supabase.co";
+const BUILTIN_SUPABASE_ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJjdWRqbG9pa21wY3F3Y3B0dXlkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzQ0MTg1NDgsImV4cCI6MjA4OTk5NDU0OH0.FaoC3QfpfHP1npNGjRchJAoAp2PdZtQe_WhP-t-GN1o";
+
 // ─── Types ───────────────────────────────────────────────────────────
 
 interface AntennaConfig {
-  supabaseUrl: string;
-  supabaseKey: string;
+  supabaseUrl?: string;
+  supabaseKey?: string;
   defaultRadiusM?: number;
   matchExpiryHours?: number;
   maxMatches?: number;
@@ -45,22 +51,24 @@ const _lastScanTime = new Map<string, number>();
 const SCAN_DEBOUNCE_MS = 30_000; // 30 seconds
 
 function getConfig(api: any): AntennaConfig {
-  const cfg = api.config?.plugins?.entries?.antenna?.config;
-  if (!cfg?.supabaseUrl || !cfg?.supabaseKey) {
-    throw new Error(
-      "Antenna plugin not configured. Set plugins.entries.antenna.config.supabaseUrl and supabaseKey in openclaw.json"
-    );
-  }
-  return cfg;
+  const cfg = api.config?.plugins?.entries?.antenna?.config ?? {};
+  return {
+    supabaseUrl: cfg.supabaseUrl || BUILTIN_SUPABASE_URL,
+    supabaseKey: cfg.supabaseKey || BUILTIN_SUPABASE_ANON_KEY,
+    defaultRadiusM: cfg.defaultRadiusM ?? 500,
+    matchExpiryHours: cfg.matchExpiryHours ?? 24,
+    maxMatches: cfg.maxMatches ?? 5,
+    autoScanOnLocation: cfg.autoScanOnLocation ?? true,
+  };
 }
 
 function getSupabase(cfg: AntennaConfig): SupabaseClient {
-  // Reuse client if URL hasn't changed
-  if (_supabaseClient && _supabaseUrl === cfg.supabaseUrl) {
+  const url = cfg.supabaseUrl!;
+  if (_supabaseClient && _supabaseUrl === url) {
     return _supabaseClient;
   }
-  _supabaseClient = createClient(cfg.supabaseUrl, cfg.supabaseKey);
-  _supabaseUrl = cfg.supabaseUrl;
+  _supabaseClient = createClient(url, cfg.supabaseKey!);
+  _supabaseUrl = url;
   return _supabaseClient;
 }
 
@@ -71,13 +79,24 @@ function isRateLimited(deviceId: string): boolean {
     return true;
   }
   _lastScanTime.set(deviceId, now);
-  // Clean up old entries periodically
   if (_lastScanTime.size > 1000) {
     for (const [k, v] of _lastScanTime) {
       if (now - v > SCAN_DEBOUNCE_MS * 2) _lastScanTime.delete(k);
     }
   }
   return false;
+}
+
+/**
+ * Snap coordinates to ~150m precision (geohash-like rounding).
+ * lat: round to 3 decimal places (~111m)
+ * lng: round to 3 decimal places (~85-111m depending on latitude)
+ */
+function fuzzyCoords(lat: number, lng: number): { lat: number; lng: number } {
+  return {
+    lat: Math.round(lat * 1000) / 1000,
+    lng: Math.round(lng * 1000) / 1000,
+  };
 }
 
 /**
@@ -159,40 +178,36 @@ export default function register(api: any) {
         };
       }
 
-      // Update my location using PostGIS function
-      await supabase.rpc("upsert_profile_location", {
-        p_device_id: deviceId,
-        p_lng: params.lng,
-        p_lat: params.lat,
-      }).then(async (res) => {
-        // Fallback: if RPC doesn't exist, use raw upsert with WKT
-        if (res.error) {
-          await supabase
-            .from("profiles")
-            .upsert(
-              {
-                device_id: deviceId,
-                last_seen_at: new Date().toISOString(),
-                visible: true,
-              },
-              { onConflict: "device_id" }
-            );
-          // Update location separately with raw SQL via postgrest
-          await supabase.rpc("update_location", {
-            p_device_id: deviceId,
-            p_lng: params.lng,
-            p_lat: params.lat,
-          }).catch(() => {
-            // If this also fails, log but continue — location won't be updated
-            logger.warn("Antenna: failed to update location for", deviceId);
-          });
-        }
-      });
+      // Fuzzy coordinates for privacy (~150m precision)
+      const fuzzy = fuzzyCoords(params.lat, params.lng);
 
-      // Query nearby
+      // Update my location using PostGIS RPC
+      const { error: upsertErr } = await supabase.rpc(
+        "upsert_profile_location",
+        {
+          p_device_id: deviceId,
+          p_lng: fuzzy.lng,
+          p_lat: fuzzy.lat,
+        }
+      );
+
+      if (upsertErr) {
+        logger.warn("Antenna: upsert_profile_location failed:", upsertErr.message);
+        // Fallback: upsert without location
+        await supabase.from("profiles").upsert(
+          {
+            device_id: deviceId,
+            last_seen_at: new Date().toISOString(),
+            visible: true,
+          },
+          { onConflict: "device_id" }
+        );
+      }
+
+      // Query nearby (use original coords for better accuracy in query)
       const { data: nearby, error } = await supabase.rpc("nearby_profiles", {
-        p_lat: params.lat,
-        p_lng: params.lng,
+        p_lat: fuzzy.lat,
+        p_lng: fuzzy.lng,
         p_radius_m: radius,
       });
 
@@ -400,12 +415,12 @@ export default function register(api: any) {
   });
 
   // ═══════════════════════════════════════════════════════════════════
-  // Tool: antenna_accept — accept a match (send greeting)
+  // Tool: antenna_accept — accept a match and optionally share contact
   // ═══════════════════════════════════════════════════════════════════
   api.registerTool({
     name: "antenna_accept",
     description:
-      "Accept a match — marks the match as accepted. If both sides accept, the agent should facilitate introductions.",
+      "Accept a match. Optionally share contact info (WeChat, Telegram, phone, etc). If both sides accept, they can exchange contact info through their agents.",
     parameters: {
       type: "object",
       properties: {
@@ -415,6 +430,11 @@ export default function register(api: any) {
           type: "string",
           description: "The device_id of the person to accept",
         },
+        contact_info: {
+          type: "string",
+          description:
+            "Optional contact info to share (e.g. 'WeChat: yi_xxx' or 'Telegram: @yi')",
+        },
       },
       required: ["sender_id", "channel", "target_device_id"],
     },
@@ -422,15 +442,21 @@ export default function register(api: any) {
       sender_id: string;
       channel: string;
       target_device_id: string;
+      contact_info?: string;
     }) => {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
       const deviceId = deriveDeviceId(params.sender_id, params.channel);
 
-      // Update match status
+      // Update match status + optional contact info
+      const updateData: Record<string, any> = { status: "accepted" };
+      if (params.contact_info) {
+        updateData.contact_info_a = params.contact_info;
+      }
+
       const { error } = await supabase
         .from("matches")
-        .update({ status: "accepted" })
+        .update(updateData)
         .eq("device_id_a", deviceId)
         .eq("device_id_b", params.target_device_id)
         .gt("expires_at", new Date().toISOString());
@@ -439,22 +465,103 @@ export default function register(api: any) {
         return { error: error.message };
       }
 
-      // Check if mutual
+      // Check if mutual match
       const { data: reverse } = await supabase
         .from("matches")
-        .select("status")
+        .select("status, contact_info_a")
         .eq("device_id_a", params.target_device_id)
         .eq("device_id_b", deviceId)
         .eq("status", "accepted")
         .single();
 
+      if (reverse) {
+        // Mutual match! Return the other person's contact info if they shared it
+        return {
+          accepted: true,
+          mutual: true,
+          their_contact: reverse.contact_info_a || null,
+          message: reverse.contact_info_a
+            ? `双方都接受了！对方分享的联系方式：${reverse.contact_info_a}`
+            : "双方都接受了！但对方还没有分享联系方式，等 TA 分享后会通知你。",
+        };
+      }
+
       return {
         accepted: true,
-        mutual: !!reverse,
-        message: reverse
-          ? "双方都接受了！你们可以打个招呼了 👋"
-          : "已接受。等对方也接受后，你们就可以认识了。",
+        mutual: false,
+        message: "已接受。等对方也接受后，你们就可以交换联系方式了。",
       };
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Tool: antenna_check_matches — check for mutual matches / new contact info
+  // ═══════════════════════════════════════════════════════════════════
+  api.registerTool({
+    name: "antenna_check_matches",
+    description:
+      "Check for any mutual matches or new contact info shared by matched people. Use periodically or when the user asks about match status.",
+    parameters: {
+      type: "object",
+      properties: {
+        sender_id: { type: "string" },
+        channel: { type: "string" },
+      },
+      required: ["sender_id", "channel"],
+    },
+    handler: async (params: { sender_id: string; channel: string }) => {
+      const cfg = getConfig(api);
+      const supabase = getSupabase(cfg);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+
+      // Find my accepted matches
+      const { data: myMatches } = await supabase
+        .from("matches")
+        .select("device_id_b, status, contact_info_a")
+        .eq("device_id_a", deviceId)
+        .eq("status", "accepted")
+        .gt("expires_at", new Date().toISOString());
+
+      if (!myMatches || myMatches.length === 0) {
+        return { mutual_matches: [], message: "目前没有进行中的匹配。" };
+      }
+
+      // Check which ones are mutual
+      const mutualMatches = [];
+      for (const match of myMatches) {
+        const { data: reverse } = await supabase
+          .from("matches")
+          .select("status, contact_info_a")
+          .eq("device_id_a", match.device_id_b)
+          .eq("device_id_b", deviceId)
+          .eq("status", "accepted")
+          .single();
+
+        if (reverse) {
+          // Get their profile
+          const { data: profile } = await supabase
+            .from("profiles")
+            .select("display_name, emoji")
+            .eq("device_id", match.device_id_b)
+            .single();
+
+          mutualMatches.push({
+            name: profile?.display_name || "匿名",
+            emoji: profile?.emoji || "👤",
+            their_contact: reverse.contact_info_a || null,
+            you_shared: match.contact_info_a || null,
+          });
+        }
+      }
+
+      if (mutualMatches.length === 0) {
+        return {
+          mutual_matches: [],
+          message: "你接受了一些匹配，但对方还没有回应。耐心等等 ⏳",
+        };
+      }
+
+      return { mutual_matches: mutualMatches };
     },
   });
 

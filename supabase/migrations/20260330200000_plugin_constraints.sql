@@ -23,6 +23,10 @@ END $$;
 -- Add 'reason' column to matches if missing
 ALTER TABLE matches ADD COLUMN IF NOT EXISTS reason text;
 
+-- Add contact_info columns for contact exchange
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS contact_info_a text;  -- shared by device_id_a
+ALTER TABLE matches ADD COLUMN IF NOT EXISTS contact_info_b text;  -- shared by device_id_b (reserved)
+
 -- Helper RPC: upsert profile with location (avoids WKT string issues)
 CREATE OR REPLACE FUNCTION upsert_profile_location(
   p_device_id text,

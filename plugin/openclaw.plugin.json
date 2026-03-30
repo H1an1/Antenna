@@ -37,7 +37,7 @@
         "default": true
       }
     },
-    "required": ["supabaseUrl", "supabaseKey"]
+    "required": []
   },
   "uiHints": {
     "supabaseUrl": { "label": "Supabase URL", "placeholder": "https://xxx.supabase.co" },
