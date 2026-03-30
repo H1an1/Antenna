@@ -1,84 +1,129 @@
-# 🦐 Antenna — Agent-Mediated Social Discovery
+# 📡 Antenna — Agent-Mediated Social Discovery
 
-## 一句话
-Agent 帮你感知附近有趣的人。
+> Agent 帮你感知附近有趣的人。
 
-## 核心概念
-- 人不好意思搭讪，agent 做中间人没有社交压力
-- Agent 知道主人的兴趣和状态，匹配质量远高于"附近的人"
-- 省去破冰环节——"你的 agent 觉得你们应该认识"
-
-## 产品形态
-原生 App（iOS/Android），React Native + Expo
-
-### App 做三件事：
-1. **名片编辑** — 用户写几句话描述自己
-2. **GPS 采集** — 本地转 geohash 后上报（不传精确坐标）
-3. **附近发现** — 展示附近匹配的人 + agent 写的推荐理由
-
-### 不做的事：
-- ❌ 登录/注册（设备 ID 绑定）
-- ❌ 聊天功能（用户自己有十个聊天 app）
-- ❌ 完整社交平台（我们是传感器 + 名片夹）
-- ❌ Match 历史永久保留（24h 过期，agent 记忆不在 App 里）
-- ❌ 好友列表
-
-### 24h 过期规则
-- App 里的 match 卡片：24h 后消失
-- Agent-to-agent 对话记录：24h 后清除
-- 推送通知：24h 没行动就没了
-- **唯一持久的**：你的名片 + agent 侧的记忆（不在 App 里显示）
-
-### 设计方向
-- **风格**：暖色铝壳 + 浅色奶油雷达屏（航海仪器感 × 温暖）
-- **雷达页**：真实雷达圆盘，头像按距离散落，点击展开详情卡
-- **名片页**：LN.1/2/3 标签 + Visible 开关 + Edit
-- **色调**：星光色铝壳 + 奶油屏幕 + 橙色 accent + JetBrains Mono
-- **设计文件**：`design/minimal/radar-v6.html`（最终版）
-
-## 架构
-- **App** = GPS 传感器 + 名片夹 + 通知管道
-- **后端** = Supabase（Auth-free, PostGIS, Edge Functions）
-- **智能层** = OpenClaw agent 通过 API 读取名片 + 判断匹配
-- **隐私** = 精确 GPS 不上传，geohash 模糊匹配（~200m）
-
-## API
-开放 REST API 供 OpenClaw agent 调用：
-- `GET /nearby/:deviceId` — 获取附近的人的名片
-- `POST /profile/:deviceId` — 更新名片
-- `GET /matches/:deviceId` — 获取 agent 匹配结果
-- 推送通知通过 FCM/APNs
-
-## V0.1 目标（5 天）
-- [ ] Expo 项目骨架
-- [ ] GPS 采集 + geohash 转换 + 上报
-- [ ] 名片编辑页
-- [ ] 附近发现页
-- [ ] Supabase 后端（PostGIS + 名片存储）
-- [ ] agent 匹配 API
-- [ ] 推送通知
-- [ ] TestFlight / APK 分发
-
-## 时间线
-| 日期 | 目标 |
-|------|------|
-| 周一晚 | 项目骨架 + GPS 采集 + geohash |
-| 周二 | 名片页 + 附近发现页 + Supabase |
-| 周三 | agent 匹配逻辑 + 推送 |
-| 周四 | 联调 + bug fix |
-| 周五 | TestFlight 分发 + 内测 |
-
-## 团队
-- **Yi** — 产品设计 / UI/UX
-- **Han1** — 开发（Claude Code）/ 增长策略
-- **Friday** — 产品逻辑 review / 砍需求 / 节奏把控
-
-## 冷启动
-- 场景钉子：线下活动（AI 闹等）
-- 第一批用户：OpenClaw 社区 + AI 闹参与者 + Yi 社交圈
-- 目标：50 个北京用户
-- 先海外服务器 + TestFlight，不等备案
+人不好意思搭讪，让 agent 做中间人。Agent 知道你的兴趣和状态，匹配质量远高于"附近的人"。
 
 ---
 
-*2026-03-24 创建*
+## 安装（OpenClaw Plugin）
+
+```bash
+openclaw plugins install antenna-openclaw-plugin
+openclaw gateway restart
+```
+
+**两步，零配置。** 装完后在 Telegram / WhatsApp 里给你的 agent 发一个位置，就能看到附近的人。
+
+[![npm](https://img.shields.io/npm/v/antenna-openclaw-plugin)](https://www.npmjs.com/package/antenna-openclaw-plugin)
+
+---
+
+## 怎么用
+
+### 1. 创建名片
+第一次使用时，agent 会引导你填写：
+
+| 字段 | 说明 | 例子 |
+|------|------|------|
+| **emoji** | 代表你的 emoji | 🦐 |
+| **name** | 显示名 | Yi |
+| **line1** | 你是谁 | Product Designer，做 AI 搜索 |
+| **line2** | 你喜欢什么 | 坂本龙一、游泳、做饭 |
+| **line3** | 你想找什么 | 找人聊产品设计 |
+
+### 2. 发位置
+在 Telegram / WhatsApp 里发一个位置给你的 agent。Agent 自动扫描附近的人。
+
+### 3. 查看匹配
+Agent 告诉你附近有谁，展示他们的名片和匹配理由：
+
+> 📡 附近发现 2 个人：
+>
+> 🎸 **小林** — 吉他手，喜欢后摇和 shoegaze，找人一起 jam
+> → 你们都提到了音乐——可能聊得来
+>
+> 🏃 **Alex** — 跑步爱好者，每周三晚朝阳公园
+> → 就在附近
+
+### 4. 建联
+说"想认识小林"→ agent 帮你标记接受 → 如果小林也接受 → 双方 agent 帮你们交换联系方式（微信/Telegram/手机号，你自己选）。
+
+所有匹配 **24 小时后自动过期**，用完即走。
+
+---
+
+## 核心概念
+
+- **Agent 做中间人**：没有社交压力，省去破冰环节
+- **三句话名片**：轻量但有辨识度
+- **24h 过期**：match 卡片、联系方式、所有记录 24h 后消失
+- **零登录**：设备 ID 绑定，无注册/登录
+- **隐私保护**：GPS 坐标模糊化到 ~150m 精度再存储
+
+## 支持的平台
+
+| 平台 | 位置自动检测 | 手动输入 |
+|------|:---:|:---:|
+| Telegram | ✅ | ✅ |
+| WhatsApp | ✅ | ✅ |
+| Matrix | ✅ | ✅ |
+| Discord / 其他 | — | ✅（告诉 agent 你在哪） |
+
+## 架构
+
+```
+用户发位置 → OpenClaw Agent → Antenna Plugin → Supabase（PostGIS）
+                                    ↓
+                              查 500m 内的人
+                                    ↓
+                              对比名片，算匹配分
+                                    ↓
+                              Agent 告诉用户结果
+```
+
+- **后端**：Supabase（共享实例，零配置）
+- **空间查询**：PostGIS ST_DWithin
+- **安全**：RLS + SECURITY DEFINER RPCs + anon key
+
+## 配置（可选）
+
+默认零配置。如果你想用自己的 Supabase 实例，在 `openclaw.json` 里加：
+
+```json
+{
+  "plugins": {
+    "entries": {
+      "antenna": {
+        "config": {
+          "supabaseUrl": "https://your-project.supabase.co",
+          "supabaseKey": "your-anon-key",
+          "defaultRadiusM": 500,
+          "maxMatches": 5,
+          "matchExpiryHours": 24
+        }
+      }
+    }
+  }
+}
+```
+
+## 开发
+
+```bash
+cd plugin
+npm install
+# 本地测试...
+npm version patch
+npm publish
+```
+
+## 团队
+
+- **Yi** — 产品设计
+- **Han1** — 开发
+- **Friday** — 产品逻辑 review
+
+---
+
+*2026-03-24 创建 · 2026-03-30 Plugin v0.1.0 发布*
