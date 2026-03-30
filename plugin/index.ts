@@ -226,12 +226,10 @@ export default function register(api: any) {
         };
       }
 
-      // Get my profile for matching
-      const { data: myProfile } = await supabase
-        .from("profiles")
-        .select("*")
-        .eq("device_id", deviceId)
-        .single();
+      // Get my profile for matching via RPC
+      const { data: myProfile } = await supabase.rpc("get_profile", {
+        p_device_id: deviceId,
+      });
 
       // Score matches
       const myWords = myProfile ? extractWords(myProfile) : [];
@@ -263,20 +261,16 @@ export default function register(api: any) {
 
       // Store matches
       const expiryHours = cfg.matchExpiryHours ?? 24;
-      const matchRows = topMatches.map((m) => ({
-        device_id_a: deviceId,
-        device_id_b: m.device_id,
-        reason: m.reason,
-        score: m.score,
-        status: "pending",
-        expires_at: new Date(
-          Date.now() + expiryHours * 60 * 60 * 1000
-        ).toISOString(),
-      }));
 
-      if (matchRows.length > 0) {
-        await supabase.from("matches").upsert(matchRows, {
-          onConflict: "device_id_a,device_id_b",
+      // Store matches via RPC (SECURITY DEFINER, works with anon key)
+      for (const m of topMatches) {
+        await supabase.rpc("upsert_match", {
+          p_device_id_a: deviceId,
+          p_device_id_b: m.device_id,
+          p_reason: m.reason,
+          p_score: m.score,
+          p_status: "pending",
+          p_expires_hours: expiryHours,
         });
       }
 
@@ -350,11 +344,9 @@ export default function register(api: any) {
       const deviceId = deriveDeviceId(params.sender_id, params.channel);
 
       if (params.action === "get") {
-        const { data, error } = await supabase
-          .from("profiles")
-          .select("*")
-          .eq("device_id", deviceId)
-          .single();
+        const { data, error } = await supabase.rpc("get_profile", {
+          p_device_id: deviceId,
+        });
 
         if (error || !data) {
           return {
@@ -377,24 +369,16 @@ export default function register(api: any) {
         };
       }
 
-      // action === 'set'
-      const updates: Record<string, any> = {
-        device_id: deviceId,
-        last_seen_at: new Date().toISOString(),
-      };
-      if (params.display_name !== undefined)
-        updates.display_name = params.display_name;
-      if (params.emoji !== undefined) updates.emoji = params.emoji;
-      if (params.line1 !== undefined) updates.line1 = params.line1;
-      if (params.line2 !== undefined) updates.line2 = params.line2;
-      if (params.line3 !== undefined) updates.line3 = params.line3;
-      if (params.visible !== undefined) updates.visible = params.visible;
-
-      const { data, error } = await supabase
-        .from("profiles")
-        .upsert(updates, { onConflict: "device_id" })
-        .select()
-        .single();
+      // action === 'set' — use RPC for write (SECURITY DEFINER)
+      const { data, error } = await supabase.rpc("upsert_profile", {
+        p_device_id: deviceId,
+        p_display_name: params.display_name ?? null,
+        p_emoji: params.emoji ?? null,
+        p_line1: params.line1 ?? null,
+        p_line2: params.line2 ?? null,
+        p_line3: params.line3 ?? null,
+        p_visible: params.visible ?? true,
+      });
 
       if (error) {
         return { error: error.message };
@@ -448,31 +432,26 @@ export default function register(api: any) {
       const supabase = getSupabase(cfg);
       const deviceId = deriveDeviceId(params.sender_id, params.channel);
 
-      // Update match status + optional contact info
-      const updateData: Record<string, any> = { status: "accepted" };
-      if (params.contact_info) {
-        updateData.contact_info_a = params.contact_info;
-      }
-
-      const { error } = await supabase
-        .from("matches")
-        .update(updateData)
-        .eq("device_id_a", deviceId)
-        .eq("device_id_b", params.target_device_id)
-        .gt("expires_at", new Date().toISOString());
+      // Update match status + optional contact info via RPC
+      const { error } = await supabase.rpc("upsert_match", {
+        p_device_id_a: deviceId,
+        p_device_id_b: params.target_device_id,
+        p_status: "accepted",
+        p_contact_info: params.contact_info ?? null,
+      });
 
       if (error) {
         return { error: error.message };
       }
 
-      // Check if mutual match
-      const { data: reverse } = await supabase
-        .from("matches")
-        .select("status, contact_info_a")
-        .eq("device_id_a", params.target_device_id)
-        .eq("device_id_b", deviceId)
-        .eq("status", "accepted")
-        .single();
+      // Check if mutual match via RPC
+      const { data: myMatches } = await supabase.rpc("get_my_matches", {
+        p_device_id: deviceId,
+      });
+
+      const reverse = (myMatches || []).find(
+        (m: any) => m.device_id_a === params.target_device_id && m.device_id_b === deviceId
+      );
 
       if (reverse) {
         // Mutual match! Return the other person's contact info if they shared it
@@ -514,36 +493,31 @@ export default function register(api: any) {
       const supabase = getSupabase(cfg);
       const deviceId = deriveDeviceId(params.sender_id, params.channel);
 
-      // Find my accepted matches
-      const { data: myMatches } = await supabase
-        .from("matches")
-        .select("device_id_b, status, contact_info_a")
-        .eq("device_id_a", deviceId)
-        .eq("status", "accepted")
-        .gt("expires_at", new Date().toISOString());
+      // Find my accepted matches via RPC
+      const { data: allMatches } = await supabase.rpc("get_my_matches", {
+        p_device_id: deviceId,
+      });
 
-      if (!myMatches || myMatches.length === 0) {
+      const myMatches = (allMatches || []).filter(
+        (m: any) => m.device_id_a === deviceId
+      );
+
+      if (myMatches.length === 0) {
         return { mutual_matches: [], message: "目前没有进行中的匹配。" };
       }
 
       // Check which ones are mutual
       const mutualMatches = [];
       for (const match of myMatches) {
-        const { data: reverse } = await supabase
-          .from("matches")
-          .select("status, contact_info_a")
-          .eq("device_id_a", match.device_id_b)
-          .eq("device_id_b", deviceId)
-          .eq("status", "accepted")
-          .single();
+        const reverse = (allMatches || []).find(
+          (m: any) => m.device_id_a === match.device_id_b && m.device_id_b === deviceId
+        );
 
         if (reverse) {
-          // Get their profile
-          const { data: profile } = await supabase
-            .from("profiles")
-            .select("display_name, emoji")
-            .eq("device_id", match.device_id_b)
-            .single();
+          // Get their profile via RPC
+          const { data: profile } = await supabase.rpc("get_profile", {
+            p_device_id: match.device_id_b,
+          });
 
           mutualMatches.push({
             name: profile?.display_name || "匿名",
