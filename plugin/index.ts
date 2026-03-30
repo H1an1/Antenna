@@ -88,6 +88,7 @@ function fuzzyCoords(lat: number, lng: number) {
 }
 
 // TODO: Replace with LLM-based matching for better Chinese support
+// Kept for potential future server-side pre-filtering
 function extractWords(profile: Partial<Profile>): string[] {
   const text = [profile.line1, profile.line2, profile.line3]
     .filter(Boolean)
@@ -116,7 +117,7 @@ export default function register(api: any) {
   api.registerTool({
     name: "antenna_scan",
     description:
-      "Scan for nearby people at a given location. Returns matched profiles with reasons. Use when the user shares their location or asks 'who is nearby'.",
+      "Scan for nearby people at a given location. Returns raw profile cards of nearby people — the agent should read these cards and decide who to recommend based on its understanding of the user. Use when the user shares their location or asks 'who is nearby'.",
     parameters: {
       type: "object",
       properties: {
@@ -133,10 +134,9 @@ export default function register(api: any) {
       const supabase = getSupabase(cfg);
       const deviceId = deriveDeviceId(params.sender_id, params.channel);
       const radius = params.radius_m ?? cfg.defaultRadiusM ?? 500;
-      const maxMatches = cfg.maxMatches ?? 5;
 
       if (isRateLimited(deviceId)) {
-        return ok({ matches: [], message: "刚刚才扫描过，稍等一会儿再试。", rate_limited: true });
+        return ok({ nearby: [], message: "刚刚才扫描过，稍等一会儿再试。", rate_limited: true });
       }
 
       const fuzzy = fuzzyCoords(params.lat, params.lng);
@@ -157,41 +157,22 @@ export default function register(api: any) {
       const others = (nearby ?? []).filter((p: Profile) => p.device_id !== deviceId);
 
       if (others.length === 0) {
-        return ok({ matches: [], message: `在 ${radius}m 范围内没有发现其他人。试试扩大范围？` });
+        return ok({ nearby: [], message: `在 ${radius}m 范围内没有发现其他人。试试扩大范围？` });
       }
 
-      const { data: myProfile } = await supabase.rpc("get_profile", { p_device_id: deviceId });
-
-      const myWords = myProfile ? extractWords(myProfile) : [];
-      const scored: MatchResult[] = others.map((p: Profile) => {
-        const theirWords = extractWords(p);
-        const overlap = myWords.filter((w: string) => theirWords.includes(w));
-        const score = myWords.length > 0 ? Math.min(overlap.length / myWords.length, 1) : 0;
-        const reason = overlap.length > 0
-          ? `你们都提到了 ${overlap.slice(0, 3).join("、")}——可能聊得来`
-          : `${p.display_name || p.emoji || "TA"} 就在附近`;
-        return { device_id: p.device_id, display_name: p.display_name, emoji: p.emoji,
-          line1: p.line1, line2: p.line2, line3: p.line3, score, reason };
-      });
-
-      scored.sort((a, b) => b.score - a.score);
-      const topMatches = scored.slice(0, maxMatches);
-
-      const expiryHours = cfg.matchExpiryHours ?? 24;
-      for (const m of topMatches) {
-        await supabase.rpc("upsert_match", {
-          p_device_id_a: deviceId, p_device_id_b: m.device_id,
-          p_reason: m.reason, p_score: m.score, p_status: "pending", p_expires_hours: expiryHours,
-        });
-      }
-
+      // Return raw profile cards — the agent decides who to recommend
       return ok({
-        matches: topMatches.map((m) => ({
-          emoji: m.emoji || "👤", name: m.display_name || "匿名",
-          line1: m.line1, line2: m.line2, line3: m.line3,
-          score: m.score, reason: m.reason,
+        nearby: others.map((p: Profile) => ({
+          device_id: p.device_id,
+          emoji: p.emoji || "👤",
+          name: p.display_name || "匿名",
+          line1: p.line1,
+          line2: p.line2,
+          line3: p.line3,
         })),
-        total_nearby: others.length, radius_m: radius,
+        total: others.length,
+        radius_m: radius,
+        instruction: "根据你对用户的了解（记忆、偏好、最近的状态），判断哪些人值得推荐，为每个推荐写一句个性化的匹配理由。",
       });
     },
   });

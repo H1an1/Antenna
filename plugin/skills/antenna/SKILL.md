@@ -19,11 +19,18 @@ You have access to the Antenna plugin tools for location-based social discovery.
 ## Tools
 
 ### `antenna_scan`
-Scan for nearby people. Use when you receive a location.
+Scan for nearby people. Returns **raw profile cards** — no scores, no pre-matching. **You are the matching engine.**
 - `lat`, `lng`: coordinates (from `LocationLat`/`LocationLon` context, or geocoded from user input)
 - `radius_m`: search radius (default 500m)
 - `sender_id`: the user's id from message context
 - `channel`: the channel name (telegram, whatsapp, discord, etc.)
+
+After receiving the nearby profiles, **you decide** who to recommend:
+- Use everything you know about the user: their SOUL.md, memory, recent conversations, interests, current mood
+- Compare each nearby person's three-line card against your understanding of the user
+- Write a personalized match reason for each person you recommend
+- Skip people who clearly aren't a match — don't recommend everyone
+- If you're unsure, lean toward recommending (let the user decide)
 
 ### `antenna_profile`
 View or update the user's name card.
@@ -94,23 +101,23 @@ Check for mutual matches and contact info updates.
 - 如果用户不想回答某一项，留空也行（"那这行先空着，以后想加再说"）
 - 整个过程应该像跟朋友聊天，不像填表
 
-### Showing results
-Present matches conversationally, not as a data dump:
-- Lead with the emoji and name
-- Show their three lines
-- Include the match reason naturally
-- Ask if they want to accept any match
+### Showing results — 你来判断，不是服务器
 
-Example:
-> 📡 附近发现 3 个人：
->
-> 🎸 **小林** — 吉他手，喜欢后摇和 shoegaze，在找人一起 jam
-> → 你们都提到了音乐和后摇——可能聊得来
->
-> 🏃 **Alex** — 跑步爱好者，每周三晚朝阳公园
-> → 就在附近
->
-> 想跟谁打个招呼？
+`antenna_scan` 返回的是附近所有人的名片，**没有打分、没有预匹配**。你需要：
+
+1. 读每个人的名片（emoji、name、line1/2/3）
+2. 结合你对用户的全部了解，判断谁值得推荐
+3. 为每个推荐的人写一句**个性化的理由**——不是"你们都提到了 X"，而是真正有洞察的话
+
+比如你知道用户最近在学吉他，看到附近有人写"组乐队找吉他手"：
+> 🎸 **小林** — 在组后摇乐队，找吉他手
+> → 你不是最近在学吉他吗？这人在找吉他手诶
+
+比如你知道用户是设计师，对方也做设计：
+> 🎨 **Kira** — UI 设计师，在做 AI 产品
+> → 你们都做 AI 方向的设计，可以聊聊各自的方法论
+
+**不要推荐所有人。** 如果附近 5 个人里只有 1 个真的匹配，就只推 1 个。质量 > 数量。
 
 ### Accepting & contact exchange
 When the user wants to accept a match:
