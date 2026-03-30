@@ -1,0 +1,48 @@
+{
+  "id": "antenna",
+  "name": "Antenna",
+  "description": "Agent-mediated nearby people discovery. Receives location from Telegram/WhatsApp, matches nearby people via Supabase + PostGIS, and pushes results back through the agent.",
+  "version": "0.1.0",
+  "skills": ["./skills"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "supabaseUrl": {
+        "type": "string",
+        "description": "Supabase project URL"
+      },
+      "supabaseKey": {
+        "type": "string",
+        "description": "Supabase service role key (not anon key)"
+      },
+      "defaultRadiusM": {
+        "type": "number",
+        "description": "Default search radius in meters",
+        "default": 500
+      },
+      "matchExpiryHours": {
+        "type": "number",
+        "description": "Hours before a match expires",
+        "default": 24
+      },
+      "maxMatches": {
+        "type": "number",
+        "description": "Maximum matches to return per scan",
+        "default": 5
+      },
+      "autoScanOnLocation": {
+        "type": "boolean",
+        "description": "Automatically scan for nearby people when a location message is received",
+        "default": true
+      }
+    },
+    "required": ["supabaseUrl", "supabaseKey"]
+  },
+  "uiHints": {
+    "supabaseUrl": { "label": "Supabase URL", "placeholder": "https://xxx.supabase.co" },
+    "supabaseKey": { "label": "Supabase Service Role Key", "sensitive": true },
+    "defaultRadiusM": { "label": "Default Radius (m)", "placeholder": "500" },
+    "autoScanOnLocation": { "label": "Auto-scan on Location" }
+  }
+}
