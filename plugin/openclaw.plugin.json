@@ -1,5 +1,5 @@
 {
-  "id": "antenna",
+  "id": "antenna-openclaw-plugin",
   "name": "Antenna",
   "description": "Agent-mediated nearby people discovery. Receives location from Telegram/WhatsApp, matches nearby people via Supabase + PostGIS, and pushes results back through the agent.",
   "version": "0.1.0",
