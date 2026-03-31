@@ -1,0 +1,16 @@
+{
+  "name": "antenna-mcp-server",
+  "version": "0.1.0",
+  "description": "Antenna — nearby people discovery via MCP (Model Context Protocol)",
+  "type": "module",
+  "bin": {
+    "antenna-mcp": "./index.js"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@supabase/supabase-js": "^2.49.4"
+  },
+  "keywords": ["mcp", "antenna", "location", "social", "discovery"],
+  "license": "MIT"
+}
