@@ -1,0 +1,14 @@
+{
+  "name": "antenna-cli",
+  "version": "0.1.0",
+  "description": "Antenna — nearby people discovery CLI",
+  "type": "module",
+  "bin": {
+    "antenna": "./index.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.4"
+  },
+  "keywords": ["antenna", "location", "social", "discovery", "cli"],
+  "license": "MIT"
+}
