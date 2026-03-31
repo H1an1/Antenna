@@ -1,0 +1,11 @@
+{
+  "name": "antenna-core",
+  "version": "0.1.0",
+  "description": "Shared core logic for Antenna (CLI, MCP, Plugin)",
+  "type": "module",
+  "main": "index.js",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.4"
+  },
+  "license": "MIT"
+}
