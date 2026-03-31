@@ -302,31 +302,60 @@ export default function register(api: any) {
       const deviceId = deriveDeviceId(params.sender_id, params.channel);
 
       const { data: allMatches } = await supabase.rpc("get_my_matches", { p_device_id: deviceId });
-      const myMatches = (allMatches || []).filter((m: any) => m.device_id_a === deviceId);
 
-      if (myMatches.length === 0) {
-        return ok({ mutual_matches: [], message: "目前没有进行中的匹配。" });
+      if (!allMatches?.length) {
+        return ok({ mutual_matches: [], incoming_accepts: [], message: "目前没有进行中的匹配。" });
       }
 
+      // Matches I initiated
+      const myMatches = allMatches.filter((m: any) => m.device_id_a === deviceId);
+      // Matches where someone else accepted me
+      const incomingMatches = allMatches.filter((m: any) => m.device_id_b === deviceId);
+
+      // --- Mutual matches (both sides accepted) ---
       const mutualMatches = [];
       for (const match of myMatches) {
-        const reverse = (allMatches || []).find(
-          (m: any) => m.device_id_a === match.device_id_b && m.device_id_b === deviceId
+        const reverse = incomingMatches.find(
+          (m: any) => m.device_id_a === match.device_id_b
         );
         if (reverse) {
           const { data: profile } = await supabase.rpc("get_profile", { p_device_id: match.device_id_b });
           mutualMatches.push({
+            device_id: match.device_id_b,
             name: profile?.display_name || "匿名", emoji: profile?.emoji || "👤",
+            line1: profile?.line1, line2: profile?.line2, line3: profile?.line3,
             their_contact: reverse.contact_info_a || null, you_shared: match.contact_info_a || null,
           });
         }
       }
 
-      if (mutualMatches.length === 0) {
-        return ok({ mutual_matches: [], message: "你接受了一些匹配，但对方还没有回应。耐心等等 ⏳" });
+      // --- Incoming accepts (someone accepted me but I haven't accepted them yet) ---
+      const incomingAccepts = [];
+      for (const match of incomingMatches) {
+        const iAccepted = myMatches.find(
+          (m: any) => m.device_id_b === match.device_id_a
+        );
+        if (!iAccepted) {
+          // They accepted me but I haven't responded
+          const { data: profile } = await supabase.rpc("get_profile", { p_device_id: match.device_id_a });
+          incomingAccepts.push({
+            device_id: match.device_id_a,
+            name: profile?.display_name || "匿名", emoji: profile?.emoji || "👤",
+            line1: profile?.line1, line2: profile?.line2, line3: profile?.line3,
+          });
+        }
       }
 
-      return ok({ mutual_matches: mutualMatches });
+      const messages = [];
+      if (mutualMatches.length > 0) messages.push(`${mutualMatches.length} 个双向匹配！可以交换联系方式了`);
+      if (incomingAccepts.length > 0) messages.push(`${incomingAccepts.length} 个人想认识你，等你回应`);
+      if (messages.length === 0) messages.push("你接受了一些匹配，但对方还没有回应。耐心等等 ⏳");
+
+      return ok({
+        mutual_matches: mutualMatches,
+        incoming_accepts: incomingAccepts,
+        message: messages.join("；"),
+      });
     },
   });
 
