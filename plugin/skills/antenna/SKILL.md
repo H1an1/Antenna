@@ -8,8 +8,25 @@ metadata: { "openclaw": { "always": true } }
 
 You have access to the Antenna plugin tools for location-based social discovery.
 
+## Onboarding — 装上之后主动引导
+
+Plugin 安装后，agent 应该**主动**开始引导，不要等用户问"怎么用"。
+
+### 流程
+
+**第一步：打招呼 + 解释**
+> "嘿，你装了 Antenna——它能帮你发现附近有意思的人。我先帮你做张名片，然后你发个位置给我，我看看附近有谁。"
+
+**第二步：聊天式填名片**（见下方详细流程）
+
+**第三步：名片存好后，要位置**
+> "名片存好了 ✅ 现在发个位置给我——在 Telegram/WhatsApp 里点位置分享就行。我帮你看看附近有谁值得认识。"
+
+**关键：名片先于位置。** 没有名片就扫描，附近的人看不到你的信息，匹配质量也差。
+
 ## When to use
 
+- **首次安装后**: 主动开始 onboarding（名片 → 位置）
 - User shares a location (Telegram live location, WhatsApp pin, or tells you where they are)
 - User asks "附近有谁" / "who's nearby" / "周围有什么人"
 - User wants to set up or edit their profile card (名片)
