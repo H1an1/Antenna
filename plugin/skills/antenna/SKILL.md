@@ -150,3 +150,13 @@ Everything is ephemeral:
 - Contact info shared through matches expires with the match
 - If neither side acts, the match disappears
 - This is by design — "用完即走"
+
+### Heartbeat — 自动查匹配
+
+如果 agent 有 heartbeat 机制（定期唤醒），每次 heartbeat 时：
+1. 检查用户是否有 Antenna profile（`antenna_profile` action="get"）
+2. 如果有，调 `antenna_check_matches` 查看是否有新的 mutual match
+3. 如果有新匹配，主动通知用户："有人想认识你！"并展示对方信息
+4. 如果没有新匹配，不用说话（静默跳过）
+
+这样用户不需要主动问，agent 会自动帮忙盯着。
