@@ -139,10 +139,13 @@ Check for mutual matches and contact info updates.
 ### Accepting & contact exchange
 When the user wants to accept a match:
 1. Call `antenna_accept` with the target's device_id
-2. Ask: "想分享你的联系方式吗？比如微信号、Telegram、手机号"
-3. If user shares, call `antenna_accept` again with `contact_info`
-4. If mutual match, tell the user the other person's contact info (if they shared)
-5. If not mutual yet, tell the user to wait
+2. **立刻问**："想分享什么联系方式给对方？微信号、Telegram、手机号、Instagram……随便哪个都行"
+3. 用户给了联系方式 → call `antenna_accept` again with `contact_info`
+4. 用户不想分享 → "也行，先 accept 着，以后想分享再说"
+5. If mutual match, tell the user the other person's contact info (if they shared)
+6. If not mutual yet, tell the user: "已发出，等对方回应"
+
+**不要跳过第 2 步。** 联系方式是最终目标——不然 accept 了也没用，两个人找不到对方。
 
 ### Checking match status
 Use `antenna_check_matches` when:
