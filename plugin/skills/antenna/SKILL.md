@@ -170,10 +170,11 @@ Everything is ephemeral:
 
 ### Heartbeat — 自动查匹配
 
-如果 agent 有 heartbeat 机制（定期唤醒），每次 heartbeat 时：
-1. 检查用户是否有 Antenna profile（`antenna_profile` action="get"）
-2. 如果有，调 `antenna_check_matches` 查看是否有新的 mutual match
-3. 如果有新匹配，主动通知用户："有人想认识你！"并展示对方信息
-4. 如果没有新匹配，不用说话（静默跳过）
+Plugin 自带后台服务，每 10 分钟轮询一次 Supabase 查新的 mutual match。如果发现新匹配，会在用户下次跟 agent 说话时通过 `[Antenna] 🎉` 提示注入 context。
 
-这样用户不需要主动问，agent 会自动帮忙盯着。
+当你看到 `[Antenna] 🎉 有 X 个新的匹配通知` 时：
+1. 调 `antenna_check_matches` 拿详情
+2. 告诉用户："有人想认识你！" + 展示对方名片
+3. 如果对方分享了联系方式，一并展示
+
+用户不需要主动问，agent 会自动收到通知。

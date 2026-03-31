@@ -331,22 +331,85 @@ export default function register(api: any) {
   });
 
   // ═══════════════════════════════════════════════════════════════════
-  // Hook: auto-scan when location is received
+  // Service: poll for new mutual matches every 10 minutes
+  // ═══════════════════════════════════════════════════════════════════
+  const _pendingNotifications: Map<string, any[]> = new Map(); // deviceId → new mutual matches
+
+  let _pollTimer: ReturnType<typeof setInterval> | null = null;
+
+  api.registerService({
+    id: "antenna-match-poller",
+    start: () => {
+      logger.info("Antenna: match poller started (10 min interval)");
+      _pollTimer = setInterval(async () => {
+        try {
+          const cfg = getConfig(api);
+          const supabase = getSupabase(cfg);
+
+          // Get all profiles that have been active in last 24h
+          const { data: activeProfiles } = await supabase
+            .rpc("nearby_profiles", { p_lat: 0, p_lng: 0, p_radius_m: 999999999 })
+            .select("device_id");
+
+          if (!activeProfiles?.length) return;
+
+          for (const profile of activeProfiles) {
+            const deviceId = profile.device_id;
+            const { data: matches } = await supabase.rpc("get_my_matches", { p_device_id: deviceId });
+            if (!matches?.length) continue;
+
+            // Check for matches created in last 10 min (new since last poll)
+            const newMatches = matches.filter((m: any) => {
+              const created = new Date(m.created_at).getTime();
+              return Date.now() - created < 10 * 60 * 1000;
+            });
+
+            if (newMatches.length > 0) {
+              _pendingNotifications.set(deviceId, newMatches);
+              logger.info(`Antenna: ${newMatches.length} new match(es) for ${deviceId}`);
+            }
+          }
+        } catch (err: any) {
+          logger.warn("Antenna: match poll error:", err.message);
+        }
+      }, 10 * 60 * 1000); // 10 minutes
+    },
+    stop: () => {
+      if (_pollTimer) clearInterval(_pollTimer);
+      logger.info("Antenna: match poller stopped");
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Hook: auto-scan when location is received + inject match notifications
   // ═══════════════════════════════════════════════════════════════════
   api.on(
     "before_prompt_build",
     (event: any, ctx: any) => {
       try {
         const cfg = getConfig(api);
-        if (cfg.autoScanOnLocation === false) return {};
+        let hint = "";
+
+        // --- Check for pending match notifications ---
+        if (ctx?.senderId && ctx?.channel) {
+          const deviceId = deriveDeviceId(ctx.senderId, ctx.channel);
+          const pending = _pendingNotifications.get(deviceId);
+          if (pending && pending.length > 0) {
+            _pendingNotifications.delete(deviceId);
+            hint += `\n\n[Antenna] 🎉 有 ${pending.length} 个新的匹配通知！请调用 antenna_check_matches 查看详情，并告诉用户有人想认识他们。`;
+          }
+        }
+
+        // --- Auto-scan on location ---
+        if (cfg.autoScanOnLocation === false) return hint ? { prependContext: hint } : {};
 
         const lat = ctx?.LocationLat;
         const lon = ctx?.LocationLon;
-        if (lat == null || lon == null) return {};
+        if (lat == null || lon == null) return hint ? { prependContext: hint } : {};
 
         const isLive = ctx?.LocationIsLive ?? false;
         const locationName = ctx?.LocationName ?? "";
-        const hint = isLive
+        hint += isLive
           ? `\n\n[Antenna] 📡 收到实时位置 (${lat.toFixed(4)}, ${lon.toFixed(4)})${locationName ? ` — ${locationName}` : ""}。请使用 antenna_scan 工具查看附近有谁。参数：lat=${lat}, lng=${lon}, sender_id 和 channel 从消息上下文获取。`
           : `\n\n[Antenna] 📍 收到位置 (${lat.toFixed(4)}, ${lon.toFixed(4)})${locationName ? ` — ${locationName}` : ""}。请使用 antenna_scan 工具查看附近有谁。参数：lat=${lat}, lng=${lon}, sender_id 和 channel 从消息上下文获取。`;
 
