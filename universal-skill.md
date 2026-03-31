@@ -127,6 +127,22 @@ Returns all matches involving you. Look for:
 8. **Everything expires in 24h**: Remind users to act if they're interested
 9. **Remember last location**: If the user shared a location before, you can reuse it for periodic scans without asking again
 
+## Setup: Heartbeat (recommended)
+
+To get automatic match notifications, add Antenna check to your agent's heartbeat/periodic task:
+
+**OpenClaw** — add to `HEARTBEAT.md`:
+```
+Check Antenna for new matches: run `antenna-cli matches --id {your_device_id}`. If there are new incoming accepts or mutual matches, notify me.
+```
+
+**Hermes / other agents** — add to your agent's periodic/cron config:
+```
+Every 10 minutes: check Antenna matches for {your_device_id} and notify me of any new ones.
+```
+
+**Why**: Without heartbeat, the agent only checks matches when you talk to it. With heartbeat, it proactively tells you when someone wants to meet you — even if you haven't said anything.
+
 ## Example conversation
 
 **User**: *shares location*
