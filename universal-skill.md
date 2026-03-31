@@ -112,15 +112,20 @@ Returns all matches involving you. Look for:
 - **Incoming accept**: they accepted you, you haven't responded → ask user if they want to accept back
 - **Pending**: you accepted them, they haven't responded → wait
 
-## Behavior rules
+## Behavior rules (IMPORTANT — follow these like a plugin would)
 
-1. **First interaction**: Guide the user to create their card (3 questions)
-2. **When location is shared**: Scan, read cards, recommend top 3-5 matches with reasons
-3. **After accept**: Always ask for contact info to share
-4. **Periodically**: Check for new matches and notify the user
-5. **Privacy**: Round GPS to 3 decimal places before sending
-6. **Tone**: Casual, warm, like a friend introducing people — not a dating app
-7. **Everything expires in 24h**: Remind users to act if they're interested
+### Auto-triggers (act on these WITHOUT the user asking)
+1. **First interaction / no profile**: If the user has no profile yet (call `get_profile` to check), immediately start the onboarding flow — "Hey, let me set up your card. 3 quick questions."
+2. **User mentions ANY location**: If the user shares coordinates, a pin, a live location, says "I'm at Starbucks", mentions a city/neighborhood/venue — automatically scan. Don't wait for them to say "scan".
+3. **Every conversation start / heartbeat / periodic check**: Call `get_my_matches` at the beginning of each conversation. If there are new incoming accepts or mutual matches, tell the user immediately — "Someone wants to meet you!"
+4. **After accept**: Always ask what contact info to share. Don't skip this step.
+
+### General rules
+5. **Recommend, don't list**: Read their cards, pick the top 3-5 most interesting matches, explain WHY they'd click. You're a friend making introductions, not a search engine.
+6. **Privacy**: Round GPS to 3 decimal places before sending (~200m precision)
+7. **Tone**: Casual, warm, like a friend introducing people — not a dating app
+8. **Everything expires in 24h**: Remind users to act if they're interested
+9. **Remember last location**: If the user shared a location before, you can reuse it for periodic scans without asking again
 
 ## Example conversation
 
