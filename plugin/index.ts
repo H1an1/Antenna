@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
+import { execSync } from "child_process";
 
 // ─── Built-in Supabase config (shared backend, zero config) ─────────
 
@@ -104,6 +105,90 @@ function deriveDeviceId(senderId: string, channel: string): string {
 /** Wrap result as MCP tool response */
 function ok(data: any) {
   return { content: [{ type: "text", text: JSON.stringify(data) }] };
+}
+
+// ─── Cron helpers ────────────────────────────────────────────────────
+
+const FOLLOW_UP_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+const FOLLOW_UP_MAX_DURATION_MS = 2 * 60 * 60 * 1000; // 2 hours
+const _activeFollowUps = new Map<string, string>(); // "deviceA→deviceB" → cronJobId
+
+function cronJobId(deviceA: string, deviceB: string): string {
+  // Stable, filesystem-safe id
+  const safe = (s: string) => s.replace(/[^a-zA-Z0-9_-]/g, "_");
+  return `antenna-follow-${safe(deviceA)}-${safe(deviceB)}`;
+}
+
+function startFollowUpCron(
+  deviceId: string,
+  targetDeviceId: string,
+  channel: string,
+  userId: string,
+  targetName: string,
+  logger: any,
+): void {
+  const jobId = cronJobId(deviceId, targetDeviceId);
+  const key = `${deviceId}→${targetDeviceId}`;
+
+  // Already tracking this pair
+  if (_activeFollowUps.has(key)) return;
+
+  const message = [
+    `[Antenna follow-up] 检查匹配状态：`,
+    `运行 antenna_check_matches（sender_id="${userId}", channel="${channel}"）。`,
+    `如果 ${targetName}（${targetDeviceId}）已经 mutual match，`,
+    `用 message tool 通知用户：「${targetName} 也接受了你的匹配！」并附上对方的联系方式（如果有）。`,
+    `然后运行：openclaw cron remove ${jobId}`,
+    `如果还没有 mutual，回复 HEARTBEAT_OK。`,
+  ].join(" ");
+
+  // Schedule: expire after 2h using --at for auto-cleanup
+  const expiresAt = new Date(Date.now() + FOLLOW_UP_MAX_DURATION_MS).toISOString();
+
+  try {
+    // Create recurring 15-min job
+    execSync(
+      `openclaw cron add` +
+      ` --name "Antenna: 等待 ${targetName} 回应"` +
+      ` --every 15m` +
+      ` --session isolated` +
+      ` --message ${JSON.stringify(message)}` +
+      ` --announce` +
+      ` --channel ${channel}` +
+      ` --to "${userId}"`,
+      { timeout: 10_000, encoding: "utf-8" },
+    );
+
+    _activeFollowUps.set(key, jobId);
+    logger.info(`Antenna: follow-up cron created for ${key} (job: ${jobId})`);
+
+    // Schedule auto-cleanup after 2 hours
+    setTimeout(() => {
+      try {
+        execSync(`openclaw cron remove ${jobId}`, { timeout: 5_000 });
+        logger.info(`Antenna: follow-up expired for ${key}`);
+      } catch {
+        // Job may already be removed
+      }
+      _activeFollowUps.delete(key);
+    }, FOLLOW_UP_MAX_DURATION_MS);
+  } catch (err: any) {
+    logger.warn(`Antenna: failed to create follow-up cron: ${err.message}`);
+  }
+}
+
+function stopFollowUpCron(deviceA: string, deviceB: string, logger: any): void {
+  const key = `${deviceA}→${deviceB}`;
+  const jobId = _activeFollowUps.get(key);
+  if (!jobId) return;
+
+  try {
+    execSync(`openclaw cron remove ${jobId}`, { timeout: 5_000 });
+    logger.info(`Antenna: follow-up stopped for ${key}`);
+  } catch {
+    // Already removed
+  }
+  _activeFollowUps.delete(key);
 }
 
 // ─── Plugin ──────────────────────────────────────────────────────────
@@ -268,6 +353,10 @@ export default function register(api: any) {
       );
 
       if (reverse) {
+        // Mutual match! Stop any follow-up cron for this pair
+        stopFollowUpCron(deviceId, params.target_device_id, logger);
+        stopFollowUpCron(params.target_device_id, deviceId, logger);
+
         return ok({
           accepted: true, mutual: true,
           their_contact: reverse.contact_info_a || null,
@@ -277,7 +366,19 @@ export default function register(api: any) {
         });
       }
 
-      return ok({ accepted: true, mutual: false, message: "已接受。等对方也接受后，你们就可以交换联系方式了。" });
+      // Not mutual yet — start a follow-up cron (check every 15min for 2h)
+      const { data: targetProfile } = await supabase.rpc("get_profile", { p_device_id: params.target_device_id });
+      const targetName = targetProfile?.display_name || "对方";
+
+      startFollowUpCron(
+        deviceId, params.target_device_id,
+        params.channel, params.sender_id, targetName, logger,
+      );
+
+      return ok({
+        accepted: true, mutual: false,
+        message: "已接受。我会在接下来 2 小时内每 15 分钟检查一次对方是否回应，有消息第一时间告诉你。",
+      });
     },
   });
 
@@ -319,6 +420,10 @@ export default function register(api: any) {
           (m: any) => m.device_id_a === match.device_id_b
         );
         if (reverse) {
+          // Clean up follow-up crons for this mutual pair
+          stopFollowUpCron(deviceId, match.device_id_b, logger);
+          stopFollowUpCron(match.device_id_b, deviceId, logger);
+
           const { data: profile } = await supabase.rpc("get_profile", { p_device_id: match.device_id_b });
           mutualMatches.push({
             device_id: match.device_id_b,
