@@ -9,6 +9,7 @@ import {
   setProfile,
   accept,
   checkMatches,
+  checkin,
   deriveDeviceId,
 } from "../core/index.js";
 
@@ -90,6 +91,31 @@ server.tool(
   async ({ sender_id, channel, target_device_id, contact_info }) => {
     try {
       const result = await accept({ device_id: deriveDeviceId(sender_id, channel), target_device_id, contact_info });
+      return jsonResult(result);
+    } catch (e) {
+      return jsonResult({ error: e.message });
+    }
+  }
+);
+
+// ─── antenna_checkin ─────────────────────────────────────────────────
+
+server.tool(
+  "antenna_checkin",
+  "Check in at a location — update your position so others can find you.",
+  {
+    lat: z.number().describe("Latitude"),
+    lng: z.number().describe("Longitude"),
+    sender_id: z.string().describe("The sender's user ID"),
+    channel: z.string().describe("Channel name"),
+    place_name: z.string().optional().describe("Name of the place"),
+  },
+  async ({ lat, lng, sender_id, channel, place_name }) => {
+    try {
+      const result = await checkin({ lat, lng, device_id: deriveDeviceId(sender_id, channel) });
+      if (result.checked_in && place_name) {
+        result.message = `已签到 (${place_name}) 📍 现在附近的人扫描就能看到你了。`;
+      }
       return jsonResult(result);
     } catch (e) {
       return jsonResult({ error: e.message });

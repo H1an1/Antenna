@@ -319,6 +319,53 @@ export default function register(api: any) {
   });
 
   // ═══════════════════════════════════════════════════════════════════
+  // Tool: antenna_checkin
+  // ═══════════════════════════════════════════════════════════════════
+  api.registerTool({
+    name: "antenna_checkin",
+    description:
+      "Check in at a location — update your position so others can find you when they scan. Use when the user says 'I'm at XX' or wants to be discoverable without scanning others. Also works with place names (agent should geocode first).",
+    parameters: {
+      type: "object",
+      properties: {
+        lat: { type: "number", description: "Latitude" },
+        lng: { type: "number", description: "Longitude" },
+        sender_id: { type: "string", description: "The sender's user ID" },
+        channel: { type: "string", description: "The channel name" },
+        place_name: { type: "string", description: "Optional: name of the place (for confirmation message)" },
+      },
+      required: ["lat", "lng", "sender_id", "channel"],
+    },
+    async execute(_id: string, params: any) {
+      const cfg = getConfig(api);
+      const supabase = getSupabase(cfg);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const fuzzy = fuzzyCoords(params.lat, params.lng);
+
+      // Check if user has a profile first
+      const { data: profile } = await supabase.rpc("get_profile", { p_device_id: deviceId });
+      if (!profile) {
+        return ok({
+          checked_in: false,
+          message: "你还没有名片，别人看到你也不知道你是谁。先创建一个名片吧（告诉我你的名字、emoji、三句话介绍自己）。",
+        });
+      }
+
+      const { error } = await supabase.rpc("upsert_profile_location", {
+        p_device_id: deviceId, p_lng: fuzzy.lng, p_lat: fuzzy.lat,
+      });
+
+      if (error) return ok({ error: error.message });
+
+      const place = params.place_name ? ` (${params.place_name})` : "";
+      return ok({
+        checked_in: true,
+        message: `已签到${place} 📍 现在附近的人扫描就能看到你了。`,
+      });
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
   // Tool: antenna_accept
   // ═══════════════════════════════════════════════════════════════════
   api.registerTool({

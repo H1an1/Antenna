@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { scan, getProfile, setProfile, accept, checkMatches } from "../core/index.js";
+import { scan, getProfile, setProfile, accept, checkMatches, checkin } from "../core/index.js";
 
 const [,, cmd, ...args] = process.argv;
 
@@ -76,6 +76,17 @@ async function main() {
       break;
     }
 
+    case "checkin": {
+      if (!f.id || !f.lat || !f.lng) return console.error("Usage: antenna checkin --id telegram:123 --lat 39.99 --lng 116.48 [--place '三里屯']");
+      const result = await checkin({
+        lat: +f.lat,
+        lng: +f.lng,
+        device_id: f.id,
+      });
+      console.log(result.checked_in ? "✅ " + result.message : "❌ " + result.message);
+      break;
+    }
+
     case "matches": {
       if (!f.id) return console.error("Usage: antenna matches --id telegram:123");
       const result = await checkMatches({ device_id: f.id });
@@ -102,6 +113,7 @@ async function main() {
 
 Usage:
   antenna scan     --lat 39.99 --lng 116.48 [--radius 500] [--id telegram:123]
+  antenna checkin  --id telegram:123 --lat 39.99 --lng 116.48 [--place '三里屯']
   antenna profile  --id telegram:123 [--name Yi --emoji 🦦 --line1 '...']
   antenna accept   --id telegram:123 --target telegram:789 [--contact 'WeChat: yi']
   antenna matches  --id telegram:123

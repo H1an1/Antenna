@@ -151,6 +151,34 @@ export async function accept({
   };
 }
 
+// ─── checkin ─────────────────────────────────────────────────────────
+
+export async function checkin({ lat, lng, device_id, supabaseUrl, supabaseKey }) {
+  const sb = getClient(supabaseUrl, supabaseKey);
+  const fuzzy = fuzzyCoord(lat, lng);
+
+  // Check profile exists
+  const profile = await getProfile({ device_id, supabaseUrl, supabaseKey });
+  if (!profile) {
+    return {
+      checked_in: false,
+      message: "你还没有名片，先创建一个吧。",
+    };
+  }
+
+  const { error } = await sb.rpc("upsert_profile_location", {
+    p_device_id: device_id,
+    p_lng: fuzzy.lng,
+    p_lat: fuzzy.lat,
+  });
+  if (error) throw new Error(error.message);
+
+  return {
+    checked_in: true,
+    message: "已签到 📍 现在附近的人扫描就能看到你了。",
+  };
+}
+
 // ─── checkMatches ────────────────────────────────────────────────────
 
 export async function checkMatches({ device_id, supabaseUrl, supabaseKey }) {
