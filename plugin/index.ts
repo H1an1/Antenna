@@ -119,6 +119,28 @@ function cronJobId(deviceA: string, deviceB: string): string {
   return `antenna-follow-${safe(deviceA)}-${safe(deviceB)}`;
 }
 
+/** Send a real-time notification to a user via openclaw agent --deliver */
+function notifyUser(
+  channel: string,
+  userId: string,
+  message: string,
+  logger: any,
+): void {
+  try {
+    execSync(
+      `openclaw agent` +
+      ` --message ${JSON.stringify(message)}` +
+      ` --deliver` +
+      ` --reply-channel ${channel}` +
+      ` --reply-to "${userId}"`,
+      { timeout: 30_000, encoding: "utf-8" },
+    );
+    logger.info(`Antenna: notified ${channel}:${userId}`);
+  } catch (err: any) {
+    logger.warn(`Antenna: notify failed for ${channel}:${userId}: ${err.message}`);
+  }
+}
+
 function startFollowUpCron(
   deviceId: string,
   targetDeviceId: string,
@@ -141,9 +163,6 @@ function startFollowUpCron(
     `然后运行：openclaw cron remove ${jobId}`,
     `如果还没有 mutual，回复 HEARTBEAT_OK。`,
   ].join(" ");
-
-  // Schedule: expire after 2h using --at for auto-cleanup
-  const expiresAt = new Date(Date.now() + FOLLOW_UP_MAX_DURATION_MS).toISOString();
 
   try {
     // Create recurring 15-min job
@@ -512,16 +531,16 @@ export default function register(api: any) {
   });
 
   // ═══════════════════════════════════════════════════════════════════
-  // Service: poll for new mutual matches every 10 minutes
+  // Service: poll for new matches every 10 minutes → notify instantly
   // ═══════════════════════════════════════════════════════════════════
-  const _pendingNotifications: Map<string, any[]> = new Map(); // deviceId → new mutual matches
+  const _notifiedMatches = new Set<string>(); // "deviceA→deviceB" already notified
 
   let _pollTimer: ReturnType<typeof setInterval> | null = null;
 
   api.registerService({
     id: "antenna-match-poller",
     start: () => {
-      logger.info("Antenna: match poller started (10 min interval)");
+      logger.info("Antenna: match poller started (10 min interval, real-time notify)");
       _pollTimer = setInterval(async () => {
         try {
           const cfg = getConfig(api);
@@ -539,15 +558,74 @@ export default function register(api: any) {
             const { data: matches } = await supabase.rpc("get_my_matches", { p_device_id: deviceId });
             if (!matches?.length) continue;
 
-            // Check for matches created in last 10 min (new since last poll)
+            // Find new matches created in last 10 min
             const newMatches = matches.filter((m: any) => {
               const created = new Date(m.created_at).getTime();
-              return Date.now() - created < 10 * 60 * 1000;
+              const key = `${m.device_id_a}→${m.device_id_b}`;
+              return Date.now() - created < 10 * 60 * 1000 && !_notifiedMatches.has(key);
             });
 
-            if (newMatches.length > 0) {
-              _pendingNotifications.set(deviceId, newMatches);
-              logger.info(`Antenna: ${newMatches.length} new match(es) for ${deviceId}`);
+            if (newMatches.length === 0) continue;
+
+            // Parse channel and userId from device_id (format: "channel:userId")
+            const parts = deviceId.split(":");
+            if (parts.length < 2) continue;
+            const channel = parts[0];
+            const userId = parts.slice(1).join(":");
+
+            // Check for mutual matches
+            const myMatches = matches.filter((m: any) => m.device_id_a === deviceId);
+            const incomingMatches = matches.filter((m: any) => m.device_id_b === deviceId);
+
+            for (const match of newMatches) {
+              const notifyKey = `${match.device_id_a}→${match.device_id_b}`;
+              _notifiedMatches.add(notifyKey);
+
+              // Is this a new mutual match?
+              if (match.device_id_a === deviceId) {
+                const reverse = incomingMatches.find((m: any) => m.device_id_a === match.device_id_b);
+                if (reverse) {
+                  const { data: theirProfile } = await supabase.rpc("get_profile", { p_device_id: match.device_id_b });
+                  const name = theirProfile?.display_name || "对方";
+                  const emoji = theirProfile?.emoji || "👤";
+                  const contact = reverse.contact_info_a ? `\n对方的联系方式：${reverse.contact_info_a}` : "";
+                  notifyUser(
+                    channel, userId,
+                    `[Antenna] 🎉 双向匹配成功！${emoji} ${name} 也接受了你！${contact}\n\n用 antenna_check_matches 查看详情。`,
+                    logger,
+                  );
+                  // Clean up follow-up crons
+                  stopFollowUpCron(deviceId, match.device_id_b, logger);
+                }
+              } else if (match.device_id_b === deviceId) {
+                // Someone new accepted me
+                const { data: theirProfile } = await supabase.rpc("get_profile", { p_device_id: match.device_id_a });
+                const name = theirProfile?.display_name || "有人";
+                const emoji = theirProfile?.emoji || "👤";
+                const iAccepted = myMatches.find((m: any) => m.device_id_b === match.device_id_a);
+                if (iAccepted) {
+                  // I already accepted them → mutual!
+                  const contact = match.contact_info_a ? `\n对方的联系方式：${match.contact_info_a}` : "";
+                  notifyUser(
+                    channel, userId,
+                    `[Antenna] 🎉 双向匹配成功！${emoji} ${name} 也接受了你！${contact}\n\n用 antenna_check_matches 查看详情。`,
+                    logger,
+                  );
+                  stopFollowUpCron(deviceId, match.device_id_a, logger);
+                } else {
+                  // They accepted me but I haven't responded
+                  notifyUser(
+                    channel, userId,
+                    `[Antenna] 📩 ${emoji} ${name} 想认识你！看看 TA 的名片，决定要不要接受？\n\n用 antenna_check_matches 查看详情。`,
+                    logger,
+                  );
+                }
+              }
+            }
+
+            // Prune old entries from _notifiedMatches (keep last 24h)
+            if (_notifiedMatches.size > 5000) {
+              _notifiedMatches.clear();
             }
           }
         } catch (err: any) {
@@ -562,7 +640,7 @@ export default function register(api: any) {
   });
 
   // ═══════════════════════════════════════════════════════════════════
-  // Hook: auto-scan when location is received + inject match notifications
+  // Hook: auto-scan when location is received
   // ═══════════════════════════════════════════════════════════════════
   api.on(
     "before_prompt_build",
@@ -571,26 +649,16 @@ export default function register(api: any) {
         const cfg = getConfig(api);
         let hint = "";
 
-        // --- Check for pending match notifications ---
-        if (ctx?.senderId && ctx?.channel) {
-          const deviceId = deriveDeviceId(ctx.senderId, ctx.channel);
-          const pending = _pendingNotifications.get(deviceId);
-          if (pending && pending.length > 0) {
-            _pendingNotifications.delete(deviceId);
-            hint += `\n\n[Antenna] 🎉 有 ${pending.length} 个新的匹配通知！请调用 antenna_check_matches 查看详情，并告诉用户有人想认识他们。`;
-          }
-        }
-
         // --- Auto-scan on location ---
-        if (cfg.autoScanOnLocation === false) return hint ? { prependContext: hint } : {};
+        if (cfg.autoScanOnLocation === false) return {};
 
         const lat = ctx?.LocationLat;
         const lon = ctx?.LocationLon;
-        if (lat == null || lon == null) return hint ? { prependContext: hint } : {};
+        if (lat == null || lon == null) return {};
 
         const isLive = ctx?.LocationIsLive ?? false;
         const locationName = ctx?.LocationName ?? "";
-        hint += isLive
+        hint = isLive
           ? `\n\n[Antenna] 📡 收到实时位置 (${lat.toFixed(4)}, ${lon.toFixed(4)})${locationName ? ` — ${locationName}` : ""}。请使用 antenna_scan 工具查看附近有谁。参数：lat=${lat}, lng=${lon}, sender_id 和 channel 从消息上下文获取。`
           : `\n\n[Antenna] 📍 收到位置 (${lat.toFixed(4)}, ${lon.toFixed(4)})${locationName ? ` — ${locationName}` : ""}。请使用 antenna_scan 工具查看附近有谁。参数：lat=${lat}, lng=${lon}, sender_id 和 channel 从消息上下文获取。`;
 
