@@ -1,39 +1,8 @@
 {
-  "name": "antenna-init",
-  "version": "1.0.0",
-  "main": "index.ts",
-  "scripts": {
-    "start": "expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
-    "web": "expo start --web"
-  },
-  "dependencies": {
-    "@expo/cli": "^55.0.18",
-    "@expo/metro-runtime": "~55.0.6",
-    "@react-native-async-storage/async-storage": "^3.0.1",
-    "@react-navigation/bottom-tabs": "^7.15.7",
-    "@react-navigation/native": "^7.2.0",
-    "@supabase/supabase-js": "^2.100.0",
-    "expo": "~55.0.8",
-    "expo-linear-gradient": "~55.0.9",
-    "expo-location": "^55.1.4",
-    "expo-status-bar": "~55.0.4",
-    "ngeohash": "^0.6.3",
-    "react": "19.2.0",
-    "react-dom": "19.2.0",
-    "react-native": "0.83.2",
-    "react-native-safe-area-context": "^5.7.0",
-    "react-native-screens": "^4.24.0",
-    "react-native-svg": "15.15.3",
-    "react-native-web": "^0.21.0",
-    "uuid": "^13.0.0"
-  },
-  "devDependencies": {
-    "@types/ngeohash": "^0.6.8",
-    "@types/react": "~19.2.2",
-    "@types/uuid": "^10.0.0",
-    "typescript": "~5.9.2"
-  },
-  "private": true
+  "name": "antenna",
+  "version": "0.10.1",
+  "private": true,
+  "description": "Antenna — AI-powered social discovery. Monorepo for CLI, MCP server, Hermes Plugin, OpenClaw Plugin, and Supabase schema.",
+  "repository": "https://github.com/H1an1/Antenna",
+  "license": "MIT"
 }

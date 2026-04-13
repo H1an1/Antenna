@@ -221,17 +221,17 @@ export default function register(api: any) {
   api.registerTool({
     name: "antenna_scan",
     description:
-      "Scan for nearby people. If lat/lng are omitted, uses the location from the user's web GPS binding (antenna.fyi/locate). Returns raw profile cards — the agent decides who to recommend.",
+      "Scan for nearby people at a given location. Returns raw profile cards of nearby people — the agent should read these cards and decide who to recommend based on its understanding of the user. Use when the user shares their location or asks 'who is nearby'.",
     parameters: {
       type: "object",
       properties: {
-        lat: { type: "number", description: "Latitude (optional if location was shared via web)" },
-        lng: { type: "number", description: "Longitude (optional if location was shared via web)" },
-        radius_m: { type: "number", description: "Search radius in meters (default 500, max 1000)" },
+        lat: { type: "number", description: "Latitude" },
+        lng: { type: "number", description: "Longitude" },
+        radius_m: { type: "number", description: "Search radius in meters (default: 500)" },
         sender_id: { type: "string", description: "The sender's user ID (from message context)" },
         channel: { type: "string", description: "The channel name (telegram, whatsapp, etc.)" },
       },
-      required: ["sender_id", "channel"],
+      required: ["lat", "lng", "sender_id", "channel"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
@@ -243,21 +243,7 @@ export default function register(api: any) {
         return ok({ nearby: [], message: "刚刚才扫描过，稍等一会儿再试。", rate_limited: true });
       }
 
-      let lat = params.lat;
-      let lng = params.lng;
-
-      // If no coordinates, read from profile (web GPS bind)
-      if (lat == null || lng == null) {
-        const { data: loc } = await supabase.rpc("get_profile_location", { p_device_id: deviceId });
-        if (loc?.found) {
-          lat = loc.lat;
-          lng = loc.lng;
-        } else {
-          return ok({ nearby: [], message: "还没有位置信息。请先通过链接分享位置，或者发送位置消息。" });
-        }
-      }
-
-      const fuzzy = fuzzyCoords(lat, lng);
+      const fuzzy = fuzzyCoords(params.lat, params.lng);
 
       const { error: upsertErr } = await supabase.rpc("upsert_profile_location", {
         p_device_id: deviceId, p_lng: fuzzy.lng, p_lat: fuzzy.lat,
@@ -347,7 +333,6 @@ export default function register(api: any) {
         updated: true,
         profile: { display_name: data.display_name, emoji: data.emoji,
           line1: data.line1, line2: data.line2, line3: data.line3, visible: data.visible },
-        next_step: "IMPORTANT: Now call antenna_bind to generate a GPS link for the user. Do not skip this.",
       });
     },
   });
@@ -459,39 +444,6 @@ export default function register(api: any) {
       return ok({
         accepted: true, mutual: false,
         message: "已接受。我会在接下来 2 小时内每 15 分钟检查一次对方是否回应，有消息第一时间告诉你。",
-      });
-    },
-  });
-
-  // ═══════════════════════════════════════════════════════════════════
-  // Tool: antenna_bind
-  // ═══════════════════════════════════════════════════════════════════
-  api.registerTool({
-    name: "antenna_bind",
-    description:
-      "Generate a GPS binding link. Send this URL to the user so they can share their phone's location via the web browser at antenna.fyi.",
-    parameters: {
-      type: "object",
-      properties: {
-        sender_id: { type: "string", description: "The sender's user ID" },
-        channel: { type: "string", description: "The channel name" },
-      },
-      required: ["sender_id", "channel"],
-    },
-    async execute(_id: string, params: any) {
-      const cfg = getConfig(api);
-      const supabase = getSupabase(cfg);
-      const deviceId = deriveDeviceId(params.sender_id, params.channel);
-
-      const { data, error } = await supabase.rpc("create_bind_token", { p_device_id: deviceId });
-      if (error) return ok({ error: error.message });
-
-      const token = data?.token;
-      const baseUrl = "https://www.antenna.fyi";
-      return ok({
-        token,
-        url: `${baseUrl}/locate?token=${token}`,
-        message: "发送这个链接给用户，在手机浏览器打开即可共享位置。",
       });
     },
   });

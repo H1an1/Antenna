@@ -1,0 +1,29 @@
+{
+  "name": "antenna-fyi",
+  "version": "0.10.1",
+  "description": "Antenna — nearby people discovery. CLI + MCP server + OpenClaw skill & plugin, all in one package.",
+  "type": "module",
+  "bin": {
+    "antenna-fyi": "bin/antenna.js",
+    "antenna": "bin/antenna.js"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "keywords": [
+    "antenna",
+    "nearby",
+    "people",
+    "discovery",
+    "location",
+    "social",
+    "mcp",
+    "openclaw"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.0",
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "zod": "^3.24.4"
+  }
+}
