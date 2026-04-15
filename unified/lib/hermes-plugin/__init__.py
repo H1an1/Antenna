@@ -13,6 +13,7 @@ from .tools import (
     handle_checkin,
     handle_check_matches,
     handle_bind,
+    handle_ip_locate,
     _sb,
     _device_id,
     SCAN_SCHEMA,
@@ -21,6 +22,7 @@ from .tools import (
     CHECKIN_SCHEMA,
     CHECK_MATCHES_SCHEMA,
     BIND_SCHEMA,
+    IP_LOCATE_SCHEMA,
 )
 import re
 import time
@@ -38,6 +40,7 @@ def register(ctx):
     ctx.register_tool("antenna_checkin", CHECKIN_SCHEMA, handle_checkin)
     ctx.register_tool("antenna_check_matches", CHECK_MATCHES_SCHEMA, handle_check_matches)
     ctx.register_tool("antenna_bind", BIND_SCHEMA, handle_bind)
+    ctx.register_tool("antenna_ip_locate", IP_LOCATE_SCHEMA, handle_ip_locate)
 
     # ── Hook: auto-detect location + check web GPS events ─────────
     def on_pre_llm(messages, **kwargs):

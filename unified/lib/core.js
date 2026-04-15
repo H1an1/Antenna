@@ -281,3 +281,49 @@ export async function createBindToken({ device_id, supabaseUrl, supabaseKey }) {
     message: "发送这个链接给用户，在手机浏览器打开即可共享位置。",
   };
 }
+
+// ─── ipLocate ─────────────────────────────────────────────────────
+
+const IP_REGEX = /^(?:(?:\d{1,3}\.){3}\d{1,3}|(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4})$/;
+
+export async function ipLocate({ ip, device_id, supabaseUrl, supabaseKey }) {
+  // Validate IP format
+  if (!ip || !IP_REGEX.test(ip)) {
+    return { located: false, message: "IP 定位失败：无效的 IP 地址" };
+  }
+
+  // Call ip-api.com
+  try {
+    const resp = await fetch(`http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,lat,lon,city,country`);
+    const data = await resp.json();
+
+    if (data.status !== "success") {
+      return { located: false, message: `IP 定位失败：${data.message || "未知错误"}` };
+    }
+
+    const fuzzy = fuzzyCoord(data.lat, data.lon);
+
+    // Optionally update profile location
+    if (device_id) {
+      const sb = getClient(supabaseUrl, supabaseKey);
+      await sb.rpc("upsert_profile_location", {
+        p_device_id: device_id,
+        p_lng: fuzzy.lng,
+        p_lat: fuzzy.lat,
+      });
+    }
+
+    const location = [data.city, data.country].filter(Boolean).join(", ") || "未知位置";
+    return {
+      located: true,
+      lat: fuzzy.lat,
+      lng: fuzzy.lng,
+      city: data.city || null,
+      country: data.country || null,
+      accuracy_km: 50,
+      message: `IP 定位成功：${location}（精度约 50km）。你可以用这些坐标调用 antenna_scan 或 antenna_checkin。`,
+    };
+  } catch (e) {
+    return { located: false, message: `IP 定位失败：${e.message}` };
+  }
+}

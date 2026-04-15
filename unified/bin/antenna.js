@@ -8,6 +8,7 @@ import {
   handleCheckin,
   handleMatches,
   handleBind,
+  handleIpLocate,
   handleSetup,
   handleStatus,
   handleInstallSkill,
@@ -33,6 +34,8 @@ async function main() {
       return handleMatches(f);
     case "bind":
       return handleBind(f);
+    case "ip-locate":
+      return handleIpLocate(f);
     case "serve": {
       const { startMcpServer } = await import("../lib/mcp.js");
       return startMcpServer();

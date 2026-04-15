@@ -1,6 +1,6 @@
 ---
 name: antenna
-description: "Nearby people discovery via Antenna. Use when a user shares location, asks who's nearby, wants to set up their profile card, or interacts with match results. Handles location-based social discovery through the antenna_scan, antenna_profile, antenna_accept, antenna_check_matches, and antenna_bind tools."
+description: "Nearby people discovery via Antenna. Use when a user shares location, asks who's nearby, wants to set up their profile card, or interacts with match results. Handles location-based social discovery through the antenna_scan, antenna_profile, antenna_accept, antenna_check_matches, antenna_bind, and antenna_ip_locate tools."
 metadata: { "openclaw": { "always": true } }
 ---
 
@@ -86,6 +86,14 @@ Generate a GPS binding link. **You MUST call this immediately after saving a pro
 - Returns a URL like `https://www.antenna.fyi/locate?token=xxx`
 - Send this link to the user — they open it on their phone, allow GPS, and their location is automatically shared
 - **MANDATORY after profile save. Do not wait for user to ask.**
+
+### `antenna_ip_locate`
+Get a coarse location from an IP address (city-level, ~50km accuracy).
+- `ip`: IPv4 or IPv6 address
+- `sender_id`, `channel`: from context
+- Returns approximate coordinates + city/country
+- Use when you have the user's IP but no GPS — then pass the lat/lng to `antenna_scan` or `antenna_checkin`
+- **Note: This is much less accurate than GPS (~50km vs ~150m). Prefer GPS binding or location messages when possible.**
 
 ## Behavior guidelines
 
@@ -173,6 +181,7 @@ Use `antenna_check_matches` when:
 - **Telegram/WhatsApp location**: context will have `LocationLat`, `LocationLon` — use directly
 - **User says a place name**: geocode it first (use web_search or a geocoding service), then call antenna_scan
 - **Live location**: note that it's real-time, tell the user you'll check for new people
+- **IP address**: use `antenna_ip_locate` to get city-level coordinates (~50km accuracy), then pass to antenna_scan. This is the least accurate option but works when no GPS is available.
 
 ### Privacy
 - Never reveal exact coordinates to other users

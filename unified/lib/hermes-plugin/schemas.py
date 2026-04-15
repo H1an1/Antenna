@@ -134,3 +134,24 @@ BIND_SCHEMA = {
         "required": ["sender_id", "channel"],
     },
 }
+
+IP_LOCATE_SCHEMA = {
+    "name": "antenna_ip_locate",
+    "description": (
+        "Get a coarse location from an IP address (city-level, ~50km accuracy). "
+        "Use when you have the user's IP but no GPS. The result can be used "
+        "with antenna_scan or antenna_checkin."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "ip": {
+                "type": "string",
+                "description": "IPv4 or IPv6 address",
+            },
+            "sender_id": {"type": "string"},
+            "channel": {"type": "string"},
+        },
+        "required": ["ip", "sender_id", "channel"],
+    },
+}
