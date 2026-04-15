@@ -531,6 +531,99 @@ export default function register(api: any) {
   });
 
   // ═══════════════════════════════════════════════════════════════════
+  // Tool: antenna_bind
+  // ═══════════════════════════════════════════════════════════════════
+  api.registerTool({
+    name: "antenna_bind",
+    description:
+      "Generate a GPS binding link. Send this to the user so they can share their phone's location via the web browser.",
+    parameters: {
+      type: "object",
+      properties: {
+        sender_id: { type: "string", description: "The sender's user ID" },
+        channel: { type: "string", description: "The channel name" },
+      },
+      required: ["sender_id", "channel"],
+    },
+    async execute(_id: string, params: any) {
+      const cfg = getConfig(api);
+      const supabase = getSupabase(cfg);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+
+      const { data, error } = await supabase.rpc("create_bind_token", { p_device_id: deviceId });
+      if (error || !data) return ok({ error: error?.message || "Failed to create bind token" });
+
+      return ok({
+        token: data.token,
+        url: `https://www.antenna.fyi/locate?token=${data.token}`,
+        message: "发送这个链接给用户，在手机浏览器打开即可共享位置。",
+      });
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Tool: antenna_ip_locate
+  // ═══════════════════════════════════════════════════════════════════
+  api.registerTool({
+    name: "antenna_ip_locate",
+    description:
+      "Get a coarse location from an IP address (city-level, ~50km accuracy). Use when you have the user's IP but no GPS. The result can be used with antenna_scan or antenna_checkin.",
+    parameters: {
+      type: "object",
+      properties: {
+        ip: { type: "string", description: "IPv4 or IPv6 address" },
+        sender_id: { type: "string", description: "The sender's user ID" },
+        channel: { type: "string", description: "The channel name" },
+      },
+      required: ["ip", "sender_id", "channel"],
+    },
+    async execute(_id: string, params: any) {
+      const ipRegex = /^(?:(?:\d{1,3}\.){3}\d{1,3}|(?:[0-9a-fA-F]{0,4}:){2,7}[0-9a-fA-F]{0,4})$/;
+      const ip = (params.ip || "").trim();
+      if (!ip || !ipRegex.test(ip)) {
+        return ok({ located: false, message: "IP 定位失败：无效的 IP 地址" });
+      }
+
+      try {
+        const resp = await fetch(
+          `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,message,lat,lon,city,country`
+        );
+        const data = await resp.json();
+
+        if (data.status !== "success") {
+          return ok({ located: false, message: `IP 定位失败：${data.message || "未知错误"}` });
+        }
+
+        const fuzzy = fuzzyCoords(data.lat, data.lon);
+
+        // Update profile location
+        const cfg = getConfig(api);
+        const supabase = getSupabase(cfg);
+        const deviceId = deriveDeviceId(params.sender_id, params.channel);
+        const { error: upsertErr } = await supabase.rpc("upsert_profile_location", {
+          p_device_id: deviceId, p_lng: fuzzy.lng, p_lat: fuzzy.lat,
+        });
+        if (upsertErr) {
+          logger.warn("Antenna: ip_locate upsert_profile_location failed:", upsertErr.message);
+        }
+
+        const location = [data.city, data.country].filter(Boolean).join(", ") || "未知位置";
+        return ok({
+          located: true,
+          lat: fuzzy.lat,
+          lng: fuzzy.lng,
+          city: data.city || null,
+          country: data.country || null,
+          accuracy_km: 50,
+          message: `IP 定位成功：${location}（精度约 50km）。你可以用这些坐标调用 antenna_scan 或 antenna_checkin。`,
+        });
+      } catch (e: any) {
+        return ok({ located: false, message: `IP 定位失败：${e.message}` });
+      }
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
   // Service: poll for new matches every 10 minutes → notify instantly
   // ═══════════════════════════════════════════════════════════════════
   const _notifiedMatches = new Set<string>(); // "deviceA→deviceB" already notified

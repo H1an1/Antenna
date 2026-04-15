@@ -11,6 +11,7 @@ import {
   checkMatches,
   checkin,
   createBindToken,
+  ipLocate,
   deriveDeviceId,
 } from "./core.js";
 
@@ -169,6 +170,26 @@ export async function startMcpServer() {
     async ({ sender_id, channel }) => {
       try {
         const result = await createBindToken({ device_id: deriveDeviceId(sender_id, channel) });
+        return jsonResult(result);
+      } catch (e) {
+        return jsonResult({ error: e.message });
+      }
+    }
+  );
+
+  // ─── antenna_ip_locate ─────────────────────────────────────────────
+
+  server.tool(
+    "antenna_ip_locate",
+    "Get a coarse location from an IP address (city-level, ~50km accuracy). Use when you have the user's IP but no GPS. The result can be used with antenna_scan or antenna_checkin.",
+    {
+      ip: z.string().describe("IPv4 or IPv6 address"),
+      sender_id: z.string().describe("The sender's user ID"),
+      channel: z.string().describe("Channel name"),
+    },
+    async ({ ip, sender_id, channel }) => {
+      try {
+        const result = await ipLocate({ ip, device_id: deriveDeviceId(sender_id, channel) });
         return jsonResult(result);
       } catch (e) {
         return jsonResult({ error: e.message });

@@ -1,6 +1,6 @@
 // antenna CLI command handlers
 
-import { scan, getProfile, setProfile, accept, checkMatches, checkin, createBindToken } from "./core.js";
+import { scan, getProfile, setProfile, accept, checkMatches, checkin, createBindToken, ipLocate } from "./core.js";
 import { createInterface } from "readline";
 import { existsSync, mkdirSync, copyFileSync } from "fs";
 import { join, dirname } from "path";
@@ -113,6 +113,20 @@ export async function handleBind(f) {
   console.log(`  ${result.url}\n`);
   console.log("Send this to the user. Opening it on their phone will share GPS with their agent.");
   console.log();
+}
+
+export async function handleIpLocate(f) {
+  if (!f.ip) return console.error("Usage: antenna ip-locate --ip 8.8.8.8 [--id telegram:123]");
+  const result = await ipLocate({ ip: f.ip, device_id: f.id || null });
+  if (result.located) {
+    console.log(`\n📍 IP Location:\n`);
+    console.log(`  ${result.city || "Unknown"}, ${result.country || "Unknown"}`);
+    console.log(`  Lat: ${result.lat}, Lng: ${result.lng}`);
+    console.log(`  Accuracy: ~${result.accuracy_km}km\n`);
+    if (f.id) console.log("  Location saved to profile.\n");
+  } else {
+    console.error("❌ " + result.message);
+  }
 }
 
 export async function handleSetup(f) {
@@ -286,6 +300,7 @@ Usage:
   antenna accept     --id telegram:123 --target telegram:789 [--contact 'WeChat: yi']
   antenna matches    --id telegram:123
   antenna bind       --id telegram:123
+  antenna ip-locate  --ip 8.8.8.8 [--id telegram:123]
   antenna serve      Start MCP server (stdio transport)
   antenna setup      Interactive profile setup [--id telegram:123]
   antenna status     Show config & status [--id telegram:123]

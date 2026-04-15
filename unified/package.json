@@ -22,8 +22,11 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@supabase/supabase-js": "^2.49.0",
     "@modelcontextprotocol/sdk": "^1.12.1",
+    "@supabase/supabase-js": "^2.49.0",
     "zod": "^3.24.4"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.2"
   }
 }

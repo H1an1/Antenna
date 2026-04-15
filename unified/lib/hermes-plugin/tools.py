@@ -8,6 +8,7 @@ import json
 import math
 import os
 import time
+import urllib.parse
 
 try:
     from supabase import create_client
@@ -288,3 +289,50 @@ def handle_bind(params: dict) -> str:
         "url": f"{BASE_URL}/locate?token={token}",
         "message": "发送这个链接给用户，在手机浏览器打开即可共享位置。",
     })
+
+
+# ─── IP locate ─────────────────────────────────────────────────────
+
+import re as _re
+
+_IPv4_RE = _re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
+_IPv6_RE = _re.compile(r"^[0-9a-fA-F]{0,4}(:[0-9a-fA-F]{0,4}){2,7}$")
+
+
+def handle_ip_locate(params: dict) -> str:
+    import urllib.request
+    import json as _json
+
+    ip = params.get("ip", "").strip()
+    if not ip or (not _IPv4_RE.match(ip) and not _IPv6_RE.match(ip)):
+        return _ok({"located": False, "message": "IP 定位失败：无效的 IP 地址"})
+
+    try:
+        url = f"http://ip-api.com/json/{urllib.parse.quote(ip)}?fields=status,message,lat,lon,city,country"
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            data = _json.loads(resp.read().decode())
+
+        if data.get("status") != "success":
+            return _ok({"located": False, "message": f"IP 定位失败：{data.get('message', '未知错误')}"})
+
+        flat, flng = _fuzzy(data["lat"], data["lon"])
+
+        # Optionally update profile location
+        did = _device_id(params["sender_id"], params["channel"])
+        sb = _sb()
+        sb.rpc("upsert_profile_location", {
+            "p_device_id": did, "p_lng": flng, "p_lat": flat,
+        }).execute()
+
+        location = ", ".join(filter(None, [data.get("city"), data.get("country")])) or "未知位置"
+        return _ok({
+            "located": True,
+            "lat": flat,
+            "lng": flng,
+            "city": data.get("city"),
+            "country": data.get("country"),
+            "accuracy_km": 50,
+            "message": f"IP 定位成功：{location}（精度约 50km）。你可以用这些坐标调用 antenna_scan 或 antenna_checkin。",
+        })
+    except Exception as e:
+        return _ok({"located": False, "message": f"IP 定位失败：{e}"})
