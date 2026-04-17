@@ -1211,6 +1211,82 @@ export default function register(api: any) {
         logger.warn("Antenna: failed to start realtime subscription, falling back to poll only:", err.message);
       }
 
+      // ── Supabase Realtime: event participant notifications ──────
+      try {
+        const epCfg = getConfig(api);
+        const epSb = getSupabase(epCfg);
+        epSb
+          .channel('antenna-event-notify')
+          .on('postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'event_participants' },
+            async (payload: any) => {
+              try {
+                // New participant joined (pending) → notify creator
+                if (payload.new?.status !== 'pending') return;
+                const eventId = payload.new?.event_id;
+                const applicantDeviceId = payload.new?.device_id;
+                if (!eventId || !applicantDeviceId) return;
+
+                // Get event info via RPC
+                const { data: event } = await epSb.rpc('get_event_by_id', { p_event_id: eventId });
+                if (!event?.found || !event?.notify_on_join || !event?.created_by) return;
+
+                // Get applicant profile
+                const { data: applicant } = await epSb.rpc('get_profile', { p_device_id: applicantDeviceId });
+                const aName = applicant?.display_name || '某人';
+                const aEmoji = applicant?.emoji || '👤';
+
+                const parts = event.created_by.split(':');
+                if (parts.length < 2) return;
+                notifyUser(parts[0], parts.slice(1).join(':'),
+                  `[Antenna] 📩 ${aEmoji} ${aName} 申请加入你的活动「${event.name}」\n\n用 antenna_event_scan --code ${event.code} 查看申请者名片并审批。`,
+                  logger);
+              } catch (err: any) {
+                logger.warn('Antenna: event participant INSERT handler error:', err.message);
+              }
+            }
+          )
+          .on('postgres_changes',
+            { event: 'UPDATE', schema: 'public', table: 'event_participants' },
+            async (payload: any) => {
+              try {
+                // Status changed → notify the participant
+                const oldStatus = payload.old?.status;
+                const newStatus = payload.new?.status;
+                if (!oldStatus || oldStatus === newStatus) return;
+                if (newStatus !== 'active' && newStatus !== 'rejected') return;
+
+                const participantDeviceId = payload.new?.device_id;
+                const eventId = payload.new?.event_id;
+                if (!participantDeviceId || !eventId) return;
+
+                const { data: event } = await epSb.rpc('get_event_by_id', { p_event_id: eventId });
+                const eventName = event?.name || '活动';
+
+                const parts = participantDeviceId.split(':');
+                if (parts.length < 2) return;
+
+                if (newStatus === 'active') {
+                  notifyUser(parts[0], parts.slice(1).join(':'),
+                    `[Antenna] ✅ 你的申请已通过！欢迎加入「${eventName}」\n\n用 antenna_event_scan --code ${event?.code} 查看其他参与者。`,
+                    logger);
+                } else if (newStatus === 'rejected') {
+                  notifyUser(parts[0], parts.slice(1).join(':'),
+                    `[Antenna] ❌ 你的申请未通过「${eventName}」的审核。`,
+                    logger);
+                }
+              } catch (err: any) {
+                logger.warn('Antenna: event participant UPDATE handler error:', err.message);
+              }
+            }
+          )
+          .subscribe((status: string) => {
+            logger.info(`Antenna: event participant realtime status: ${status}`);
+          });
+      } catch (err: any) {
+        logger.warn('Antenna: failed to start event participant realtime:', err.message);
+      }
+
       // ── Poll fallback: catch anything Realtime missed ───────────
       _pollTimer = setInterval(async () => {
         try {

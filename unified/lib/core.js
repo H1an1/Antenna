@@ -624,6 +624,8 @@ export async function eventScan({ code, device_id, supabaseUrl, supabaseKey }) {
       line3: p.line3,
       checked_in: !!p.checked_in,
       role: p.role || "participant",
+      status: p.status || "active",
+      application_context: p.application_context || null,
       source: "event",
     };
   });
