@@ -383,6 +383,10 @@ def handle_event_create(params: dict) -> str:
         rpc_params["p_description"] = params["description"]
     if params.get("og_image"):
         rpc_params["p_og_image"] = params["og_image"]
+    if params.get("requires_approval"):
+        rpc_params["p_requires_approval"] = params["requires_approval"]
+    if params.get("screening_questions"):
+        rpc_params["p_screening_questions"] = params["screening_questions"]
 
     resp = sb.rpc("create_event", rpc_params).execute()
     data = resp.data or {}
@@ -423,6 +427,9 @@ def handle_event_join(params: dict) -> str:
     resp = sb.rpc("join_event", {
         "p_device_id": did,
         "p_code": params["code"],
+        "p_lat": lat,
+        "p_lng": lng,
+        "p_application_context": params.get("application_context"),
     }).execute()
     data = resp.data or {}
 

@@ -179,7 +179,7 @@ export async function handleEvent(f) {
 
   if (f.create || (!f.join && !f.scan && !f.end && f.name)) {
     if (!f.name) return console.error("Usage: antenna event --create --name 'AI Meetup' [--desc 'description'] [--og-image 'url']");
-    const result = await createEvent({ name: f.name, device_id: f.id || null, lat: f.lat ? +f.lat : undefined, lng: f.lng ? +f.lng : undefined, description: f.desc || undefined, og_image: f['og-image'] || undefined });
+    const result = await createEvent({ name: f.name, device_id: f.id || null, lat: f.lat ? +f.lat : undefined, lng: f.lng ? +f.lng : undefined, description: f.desc || undefined, og_image: f['og-image'] || undefined, requires_approval: f['requires-approval'] === true || f['requires-approval'] === 'true' || undefined, screening_questions: f['screening-questions'] ? f['screening-questions'].split('|') : undefined });
     console.log(`\n🎉 Event created!\n`);
     console.log(`  Name: ${result.name}`);
     console.log(`  Code: ${result.code}`);
@@ -190,7 +190,7 @@ export async function handleEvent(f) {
 
   if (f.join) {
     if (!f.code || !f.id) return console.error("Usage: antenna event --join --code abc123 --id telegram:123");
-    const result = await joinEvent({ code: f.code, device_id: f.id });
+    const result = await joinEvent({ code: f.code, device_id: f.id, lat: f.lat ? +f.lat : undefined, lng: f.lng ? +f.lng : undefined, application_context: f['application-context'] || undefined });
     if (result.joined) {
       console.log(`\n✅ Joined "${result.name}" (${result.code})\n`);
     } else {

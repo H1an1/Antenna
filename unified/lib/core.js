@@ -555,6 +555,8 @@ export async function joinEvent({ code, device_id, lat, lng, application_context
   const { data, error } = await sb.rpc("join_event", {
     p_code: code,
     p_device_id: device_id,
+    p_lat: (lat != null && lng != null) ? fuzzyCoord(lat, lng).lat : null,
+    p_lng: (lat != null && lng != null) ? fuzzyCoord(lat, lng).lng : null,
     p_application_context: application_context || null,
   });
   if (error) throw new Error(error.message);
