@@ -302,6 +302,10 @@ Create an event. Returns a shareable link (antenna.fyi/events/CODE).
 - `starts_at`, `ends_at`: optional time range (default: now to +12h)
 - `description`: optional event description
 - `og_image`: optional OG image URL for social sharing preview
+- `requires_approval`: boolean, default false. If true, participants need organizer approval.
+- `screening_questions`: string array. Questions for applicants.
+
+**When the user mentions "审批" / "approval" / "筛选" / "报名表"**, set `requires_approval: true` and ask what questions they want to screen with.
 
 **GPS flow for events:** If the user doesn't provide coordinates, generate a bind link (`antenna_bind`) and ask them to open it at the event location. Once GPS comes in, use those coordinates for the event's `lat`/`lng` — do NOT treat this as the user's personal location. The bind link GPS for event creation goes to the event, not the user's profile. Only use `antenna_checkin` when the user wants to update their own location.
 

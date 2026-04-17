@@ -33,6 +33,10 @@ Create an event. Returns a shareable link (antenna.fyi/events/CODE).
 - `starts_at`, `ends_at`: optional time range (default: now to +12h)
 - `description`: optional event description
 - `og_image`: optional OG image URL for social sharing preview
+- `requires_approval`: boolean, default false. If true, participants must be approved by the organizer before they become visible.
+- `screening_questions`: string array. Questions to ask applicants. Agent should collect answers via conversation and submit as `application_context` when joining.
+
+**When the user says anything about "审批" / "approval" / "筛选" / "报名表"**, set `requires_approval: true` and ask what screening questions they want.
 
 **GPS flow for events:** If the user doesn't provide coordinates, generate a bind link (`antenna_bind` with `purpose="event"` and `event_code`) and ask them to open it at the event location. The GPS will update the event's coordinates, NOT the user's profile.
 
@@ -79,9 +83,10 @@ Generate a GPS link for setting event location.
 
 ### When someone says "create an event"
 1. Ask for event name (required) and description (optional)
-2. Call `antenna_event_create`
-3. If no GPS provided, call `antenna_bind(purpose="event", event_code=CODE)` and send the link
-4. Share the event URL with the user
+2. **Ask if participants need approval** ("Do you want to review and approve participants before they join?"). If yes, ask what screening questions to include.
+3. Call `antenna_event_create` with `requires_approval` and `screening_questions` if applicable
+4. If no GPS provided, call `antenna_bind(purpose="event", event_code=CODE)` and send the link
+5. Share the event URL with the user
 
 ### When someone shares an event link
 1. Extract the code from `antenna.fyi/events/CODE`

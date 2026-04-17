@@ -178,7 +178,7 @@ export async function handleEvent(f) {
   }
 
   if (f.create || (!f.join && !f.scan && !f.end && f.name)) {
-    if (!f.name) return console.error("Usage: antenna event --create --name 'AI Meetup' [--desc 'description'] [--og-image 'url']");
+    if (!f.name) return console.error("Usage: antenna event --create --name 'AI Meetup' [--desc 'description'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2']");
     const result = await createEvent({ name: f.name, device_id: f.id || null, lat: f.lat ? +f.lat : undefined, lng: f.lng ? +f.lng : undefined, description: f.desc || undefined, og_image: f['og-image'] || undefined, requires_approval: f['requires-approval'] === true || f['requires-approval'] === 'true' || undefined, screening_questions: f['screening-questions'] ? f['screening-questions'].split('|') : undefined });
     console.log(`\n🎉 Event created!\n`);
     console.log(`  Name: ${result.name}`);
@@ -215,7 +215,7 @@ export async function handleEvent(f) {
   }
 
   console.log(`Usage:
-  antenna event --create --name 'AI Meetup' [--id telegram:123] [--desc 'description'] [--og-image 'url']
+  antenna event --create --name 'AI Meetup' [--id telegram:123] [--desc 'description'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2']
   antenna event --join --code abc123 --id telegram:123
   antenna event --scan --code abc123 [--id telegram:123]
   antenna event --checkin --code abc123 --id telegram:123 [--lat 34.05 --lng -118.24]
@@ -606,7 +606,7 @@ Usage:
   antenna pass       --id telegram:123 --target telegram:789 (or --ref 1)
   antenna matches    --id telegram:123
   antenna discover   --id telegram:123
-  antenna event      --create --name 'AI Meetup' [--desc '...'] [--og-image 'url'] | --join --code abc123 | --scan --code abc123 | --end --code abc123 --id telegram:123 | --upload-image --code abc123 --file /path/to/image.png
+  antenna event      --create --name 'AI Meetup' [--desc '...'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2'] | --join --code abc123 | --scan --code abc123 | --end --code abc123 --id telegram:123 | --upload-image --code abc123 --file /path/to/image.png | --update --code abc123 --name 'New Name' | --approve --code abc123 --ref 1 | --reject --code abc123 --ref 1 | --add-host --code abc123 --ref 1
   antenna watch       --id telegram:123  Watch for new matches in real-time (Ctrl+C to stop)
   antenna bind       --id telegram:123
   antenna serve      Start MCP server (stdio transport)
