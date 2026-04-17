@@ -122,15 +122,148 @@ CHECK_MATCHES_SCHEMA = {
 BIND_SCHEMA = {
     "name": "antenna_bind",
     "description": (
-        "Generate a GPS binding link. Send this URL to the user so they can "
-        "share their phone's location via the web browser."
+        "Generate a GPS binding link. Use purpose='event' + event_code when setting an event's location."
     ),
     "parameters": {
         "type": "object",
         "properties": {
             "sender_id": {"type": "string"},
             "channel": {"type": "string"},
+            "purpose": {"type": "string", "description": "'profile' (default) or 'event'"},
+            "event_code": {"type": "string", "description": "Event code (when purpose=event)"},
         },
         "required": ["sender_id", "channel"],
+    },
+}
+
+PASS_SCHEMA = {
+    "name": "antenna_pass",
+    "description": "Pass/skip a person. They won't be recommended again.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "sender_id": {"type": "string", "description": "The sender's user ID"},
+            "channel": {"type": "string", "description": "Platform name"},
+            "ref": {
+                "type": "string",
+                "description": "Ref number from scan/discover results (e.g. '1')",
+            },
+            "target_device_id": {
+                "type": "string",
+                "description": "Device ID (use ref instead when possible)",
+            },
+        },
+        "required": ["sender_id", "channel"],
+    },
+}
+
+DISCOVER_SCHEMA = {
+    "name": "antenna_discover",
+    "description": (
+        "Get today's global recommendation — the person most similar to you "
+        "worldwide. 1 per day, no repeats."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "sender_id": {"type": "string", "description": "The sender's user ID"},
+            "channel": {"type": "string", "description": "Platform name"},
+        },
+        "required": ["sender_id", "channel"],
+    },
+}
+
+EVENT_CREATE_SCHEMA = {
+    "name": "antenna_event_create",
+    "description": (
+        "Create an event. Returns a shareable link (antenna.fyi/e/CODE) "
+        "for participants to join. Optionally include a description and OG image URL."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string", "description": "Event name"},
+            "sender_id": {"type": "string", "description": "The sender's user ID"},
+            "channel": {"type": "string", "description": "Platform name"},
+            "lat": {"type": "number", "description": "Event latitude"},
+            "lng": {"type": "number", "description": "Event longitude"},
+            "starts_at": {"type": "string", "description": "Start time ISO"},
+            "ends_at": {"type": "string", "description": "End time ISO"},
+            "description": {"type": "string", "description": "Event description"},
+            "og_image": {"type": "string", "description": "OG image URL for social sharing"},
+        },
+        "required": ["name", "sender_id", "channel"],
+    },
+}
+
+EVENT_JOIN_SCHEMA = {
+    "name": "antenna_event_join",
+    "description": "Join an event by its code from the event URL.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "code": {"type": "string", "description": "Event code"},
+            "sender_id": {"type": "string", "description": "The sender's user ID"},
+            "channel": {"type": "string", "description": "Platform name"},
+        },
+        "required": ["code", "sender_id", "channel"],
+    },
+}
+
+EVENT_SCAN_SCHEMA = {
+    "name": "antenna_event_scan",
+    "description": "Scan people in an event. No distance limit.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "code": {"type": "string", "description": "Event code"},
+            "sender_id": {"type": "string", "description": "The sender's user ID"},
+            "channel": {"type": "string", "description": "Platform name"},
+        },
+        "required": ["code", "sender_id", "channel"],
+    },
+}
+
+EVENT_END_SCHEMA = {
+    "name": "antenna_event_end",
+    "description": "End an event. Only the creator can end it.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "code": {"type": "string", "description": "Event code"},
+            "sender_id": {"type": "string", "description": "The sender's user ID"},
+            "channel": {"type": "string", "description": "Platform name"},
+        },
+        "required": ["code", "sender_id", "channel"],
+    },
+}
+
+EVENT_UPLOAD_IMAGE_SCHEMA = {
+    "name": "antenna_event_upload_image",
+    "description": "Upload an image for an event OG preview. Returns a public URL.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "image_base64": {"type": "string", "description": "Base64-encoded image data"},
+            "content_type": {"type": "string", "description": "MIME type (default image/png)"},
+            "event_code": {"type": "string", "description": "Event code"},
+        },
+        "required": ["image_base64", "event_code"],
+    },
+}
+
+EVENT_CHECKIN_SCHEMA = {
+    "name": "antenna_event_checkin",
+    "description": "Check in at an event \u2014 marks you as present at the event location. Optionally updates GPS.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "code": {"type": "string", "description": "Event code"},
+            "sender_id": {"type": "string", "description": "The sender's user ID"},
+            "channel": {"type": "string", "description": "Platform name"},
+            "lat": {"type": "number", "description": "Latitude (optional)"},
+            "lng": {"type": "number", "description": "Longitude (optional)"},
+        },
+        "required": ["code", "sender_id", "channel"],
     },
 }

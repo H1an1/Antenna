@@ -7,7 +7,11 @@ import {
   handleAccept,
   handleCheckin,
   handleMatches,
+  handleDiscover,
+  handleEvent,
   handleBind,
+  handlePass,
+  handleWatch,
   handleSetup,
   handleStatus,
   handleInstallSkill,
@@ -31,8 +35,16 @@ async function main() {
       return handleCheckin(f);
     case "matches":
       return handleMatches(f);
+    case "discover":
+      return handleDiscover(f);
+    case "event":
+      return handleEvent(f);
     case "bind":
       return handleBind(f);
+    case "pass":
+      return handlePass(f);
+    case "watch":
+      return handleWatch(f);
     case "serve": {
       const { startMcpServer } = await import("../lib/mcp.js");
       return startMcpServer();

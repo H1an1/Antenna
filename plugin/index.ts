@@ -47,6 +47,7 @@ let _supabaseClient: SupabaseClient | null = null;
 let _supabaseUrl: string | null = null;
 const _lastScanTime = new Map<string, number>();
 const SCAN_DEBOUNCE_MS = 30_000;
+const _knownDeviceIds = new Set<string>();
 
 function getConfig(api: any): AntennaConfig {
   const cfg = api.config?.plugins?.entries?.antenna?.config ?? {};
@@ -99,7 +100,9 @@ function extractWords(profile: Partial<Profile>): string[] {
 }
 
 function deriveDeviceId(senderId: string, channel: string): string {
-  return `${channel}:${senderId}`;
+  const id = `${channel}:${senderId}`;
+  _knownDeviceIds.add(id);
+  return id;
 }
 
 /** Wrap result as MCP tool response */
@@ -275,22 +278,57 @@ export default function register(api: any) {
       const others = (nearby ?? []).filter((p: Profile) => p.device_id !== deviceId);
 
       if (others.length === 0) {
-        return ok({ nearby: [], message: `在 ${radius}m 范围内没有发现其他人。试试扩大范围？` });
+        // Fallback to global discover
+        const { data: globalData } = await supabase.rpc("global_discover", {
+          p_device_id: deviceId, p_limit: 1,
+        });
+        const globalOthers = globalData || [];
+        if (globalOthers.length > 0) {
+          const gRefMap: Record<string, string> = {};
+          const gProfiles = globalOthers.map((p: any, i: number) => {
+            const ref = String(i + 1);
+            gRefMap[ref] = p.device_id;
+            return { ref, emoji: p.emoji || "👤", name: p.display_name || "匿名", line1: p.line1, line2: p.line2, line3: p.line3 };
+          });
+          (api as any)._antennaRefMap = gRefMap;
+          try { await supabase.rpc("save_scan_refs", { p_owner: deviceId, p_refs: gRefMap }); } catch {}
+          for (const p of globalOthers) {
+            try { await supabase.rpc("log_recommendation", { p_device_id: deviceId, p_recommended_id: p.device_id }); } catch {}
+          }
+          return ok({
+            nearby: gProfiles, total: gProfiles.length, radius_m: radius, global: true,
+            message: `附近 ${radius}m 暂时没人。今天的全球推荐——这个人跟你可能聊得来。（每天 1 次）`,
+          });
+        }
+        return ok({ nearby: [], message: `附近暂时没人，今天的全球推荐已经用完了。明天再来！` });
       }
 
-      // Return raw profile cards — the agent decides who to recommend
-      return ok({
-        nearby: others.map((p: Profile) => ({
-          device_id: p.device_id,
+      // Build ref mapping — never expose device_id
+      const _refMap: Record<string, string> = {};
+      const profiles = others.map((p: Profile, i: number) => {
+        const ref = String(i + 1);
+        _refMap[ref] = p.device_id;
+        return {
+          ref,
           emoji: p.emoji || "👤",
           name: p.display_name || "匿名",
           line1: p.line1,
           line2: p.line2,
           line3: p.line3,
-        })),
+        };
+      });
+
+      // Store ref map for accept — memory + DB
+      (api as any)._antennaRefMap = _refMap;
+      try {
+        await supabase.rpc("save_scan_refs", { p_owner: deviceId, p_refs: _refMap });
+      } catch { /* best effort */ }
+
+      return ok({
+        nearby: profiles,
         total: others.length,
         radius_m: radius,
-        instruction: "根据你对用户的了解（记忆、偏好、最近的状态），判断哪些人值得推荐，为每个推荐写一句个性化的匹配理由。",
+        instruction: "根据你对用户的了解，判断哪些人值得推荐，用 ref 编号引用。不要显示 device_id。",
       });
     },
   });
@@ -405,24 +443,36 @@ export default function register(api: any) {
   api.registerTool({
     name: "antenna_accept",
     description:
-      "Accept a match. Optionally share contact info (WeChat, Telegram, phone, etc). If both sides accept, they can exchange contact info through their agents.",
+      "Accept a match. Use 'ref' from scan results (e.g. '1', '2') or target_device_id. Optionally share contact info.",
     parameters: {
       type: "object",
       properties: {
         sender_id: { type: "string" },
         channel: { type: "string" },
-        target_device_id: { type: "string", description: "The device_id of the person to accept" },
-        contact_info: { type: "string", description: "Optional contact info to share (e.g. 'WeChat: yi_xxx')" },
+        ref: { type: "string", description: "Ref number from scan results (e.g. '1')" },
+        target_device_id: { type: "string", description: "Device ID (use ref instead when possible)" },
+        contact_info: { type: "string", description: "Optional contact info to share" },
       },
-      required: ["sender_id", "channel", "target_device_id"],
+      required: ["sender_id", "channel"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
       const deviceId = deriveDeviceId(params.sender_id, params.channel);
 
+      // Resolve ref to device_id — try DB first, then memory fallback
+      let targetId = params.target_device_id;
+      if (!targetId && params.ref) {
+        // Try DB
+        const { data: resolved } = await supabase.rpc("resolve_ref", { p_owner: deviceId, p_ref: params.ref });
+        targetId = resolved || (api as any)._antennaRefMap?.[params.ref];
+      }
+      if (!targetId) {
+        return ok({ error: "No target. Ref may have expired — try scanning again." });
+      }
+
       const { error } = await supabase.rpc("upsert_match", {
-        p_device_id_a: deviceId, p_device_id_b: params.target_device_id,
+        p_device_id_a: deviceId, p_device_id_b: targetId,
         p_status: "accepted", p_contact_info: params.contact_info ?? null,
       });
 
@@ -430,13 +480,13 @@ export default function register(api: any) {
 
       const { data: myMatches } = await supabase.rpc("get_my_matches", { p_device_id: deviceId });
       const reverse = (myMatches || []).find(
-        (m: any) => m.device_id_a === params.target_device_id && m.device_id_b === deviceId
+        (m: any) => m.device_id_a === targetId && m.device_id_b === deviceId
       );
 
       if (reverse) {
         // Mutual match! Stop any follow-up cron for this pair
-        stopFollowUpCron(deviceId, params.target_device_id, logger);
-        stopFollowUpCron(params.target_device_id, deviceId, logger);
+        stopFollowUpCron(deviceId, targetId, logger);
+        stopFollowUpCron(targetId, deviceId, logger);
 
         return ok({
           accepted: true, mutual: true,
@@ -448,11 +498,11 @@ export default function register(api: any) {
       }
 
       // Not mutual yet — start a follow-up cron (check every 15min for 2h)
-      const { data: targetProfile } = await supabase.rpc("get_profile", { p_device_id: params.target_device_id });
+      const { data: targetProfile } = await supabase.rpc("get_profile", { p_device_id: targetId });
       const targetName = targetProfile?.display_name || "对方";
 
       startFollowUpCron(
-        deviceId, params.target_device_id,
+        deviceId, targetId,
         params.channel, params.sender_id, targetName, logger,
       );
 
@@ -469,7 +519,49 @@ export default function register(api: any) {
   api.registerTool({
     name: "antenna_bind",
     description:
-      "Generate a GPS binding link. Send this URL to the user so they can share their phone's location via the web browser at antenna.fyi.",
+      "Generate a GPS binding link. Use purpose='event' + event_code when setting an event's location.",
+    parameters: {
+      type: "object",
+      properties: {
+        sender_id: { type: "string", description: "The sender's user ID" },
+        channel: { type: "string", description: "The channel name" },
+        purpose: { type: "string", description: "'profile' (default) or 'event'" },
+        event_code: { type: "string", description: "Event code (required when purpose=event)" },
+      },
+      required: ["sender_id", "channel"],
+    },
+    async execute(_id: string, params: any) {
+      const cfg = getConfig(api);
+      const supabase = getSupabase(cfg);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+
+      const { data, error } = await supabase.rpc("create_bind_token", {
+        p_device_id: deviceId,
+        p_purpose: params.purpose || "profile",
+        p_event_code: params.event_code || null,
+      });
+      if (error) return ok({ error: error.message });
+
+      const token = data?.token;
+      const baseUrl = "https://www.antenna.fyi";
+      return ok({
+        token,
+        url: `${baseUrl}/locate?token=${token}`,
+        purpose: params.purpose || "profile",
+        message: params.purpose === "event"
+          ? "发送这个链接给活动创建者，在活动地点打开即可设定活动位置。"
+          : "发送这个链接给用户，在手机浏览器打开即可共享位置。",
+      });
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Tool: antenna_discover
+  // ═══════════════════════════════════════════════════════════════════
+  api.registerTool({
+    name: "antenna_discover",
+    description:
+      "Get today's global recommendation — the person most similar to you worldwide. 1 per day, no repeats.",
     parameters: {
       type: "object",
       properties: {
@@ -483,20 +575,293 @@ export default function register(api: any) {
       const supabase = getSupabase(cfg);
       const deviceId = deriveDeviceId(params.sender_id, params.channel);
 
-      const { data, error } = await supabase.rpc("create_bind_token", { p_device_id: deviceId });
-      if (error) return ok({ error: error.message });
+      const { data: globalData } = await supabase.rpc("global_discover", {
+        p_device_id: deviceId, p_limit: 1,
+      });
 
-      const token = data?.token;
-      const baseUrl = "https://www.antenna.fyi";
+      const results = globalData || [];
+      if (results.length === 0) {
+        return ok({ count: 0, profiles: [], message: "今天的全球推荐已用完，或者你已经看过所有人了。等新人加入！" });
+      }
+
+      const _refMap: Record<string, string> = {};
+
+      // Get my profile for match reason generation
+      const { data: myProfile } = await supabase.rpc("get_profile", { p_device_id: deviceId });
+      const myLines = myProfile ? [myProfile.line1, myProfile.line2, myProfile.line3].filter(Boolean).join(". ") : "";
+
+      const profiles = [];
+      for (let i = 0; i < results.length; i++) {
+        const p = results[i] as any;
+        const ref = String(i + 1);
+        _refMap[ref] = p.device_id;
+
+        const theirLines = [p.line1, p.line2, p.line3].filter(Boolean).join(". ");
+        let match_reason: string | null = null;
+
+        // Generate match reason via Edge Function (no client-side API key needed)
+        if (myLines && theirLines) {
+          try {
+            const supabaseUrl = cfg.supabaseUrl || BUILTIN_SUPABASE_URL;
+            const supabaseKey = cfg.supabaseKey || BUILTIN_SUPABASE_ANON_KEY;
+            const res = await fetch(`${supabaseUrl}/functions/v1/generate-match-reason`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
+              body: JSON.stringify({ my_lines: myLines, their_lines: theirLines }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              match_reason = data?.reason || null;
+            }
+          } catch { /* best effort */ }
+        }
+
+        profiles.push({ ref, emoji: p.emoji || "👤", name: p.display_name || "匿名", line1: p.line1, line2: p.line2, line3: p.line3, match_reason });
+      }
+
+      // Persist refs + log recommendation
+      (api as any)._antennaRefMap = { ...(api as any)._antennaRefMap, ..._refMap };
+      try {
+        await supabase.rpc("save_scan_refs", { p_owner: deviceId, p_refs: _refMap });
+      } catch { /* best effort */ }
+      for (const p of results) {
+        await supabase.rpc("log_recommendation", { p_device_id: deviceId, p_recommended_id: p.device_id });
+      }
+
       return ok({
-        token,
-        url: `${baseUrl}/locate?token=${token}`,
-        message: "发送这个链接给用户，在手机浏览器打开即可共享位置。",
+        count: profiles.length, profiles, global: true,
+        message: "🌍 今天的全球推荐——这个人跟你可能聊得来。",
       });
     },
   });
 
   // ═══════════════════════════════════════════════════════════════════
+  // Tool: antenna_event_create
+  // ═══════════════════════════════════════════════════════════════════
+  api.registerTool({
+    name: "antenna_event_create",
+    description: "Create an event. Returns a shareable link (antenna.fyi/e/CODE) for participants to join.",
+    parameters: {
+      type: "object",
+      properties: {
+        name: { type: "string", description: "Event name" },
+        sender_id: { type: "string" },
+        channel: { type: "string" },
+        lat: { type: "number", description: "Event latitude" },
+        lng: { type: "number", description: "Event longitude" },
+        starts_at: { type: "string", description: "Start time ISO" },
+        ends_at: { type: "string", description: "End time ISO" },
+        description: { type: "string", description: "Event description" },
+        og_image: { type: "string", description: "OG image URL for social sharing" },
+      },
+      required: ["name", "sender_id", "channel"],
+    },
+    async execute(_id: string, params: any) {
+      const cfg = getConfig(api);
+      const supabase = getSupabase(cfg);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const { data, error } = await supabase.rpc("create_event", {
+        p_name: params.name,
+        p_lat: params.lat || null,
+        p_lng: params.lng || null,
+        p_created_by: deviceId,
+        p_starts_at: params.starts_at || new Date().toISOString(),
+        p_ends_at: params.ends_at || new Date(Date.now() + 12*60*60*1000).toISOString(),
+        p_description: params.description || null,
+        p_og_image: params.og_image || null,
+      });
+      if (error) return ok({ error: error.message });
+      return ok(data);
+    },
+  });
+
+  // ═════════════════════════════════════════════════════════════════
+  // Tool: antenna_event_end
+  // ═════════════════════════════════════════════════════════════════
+  api.registerTool({
+    name: "antenna_event_end",
+    description: "End an event. Only the creator can end it.",
+    parameters: {
+      type: "object",
+      properties: {
+        code: { type: "string", description: "Event code" },
+        sender_id: { type: "string" },
+        channel: { type: "string" },
+      },
+      required: ["code", "sender_id", "channel"],
+    },
+    async execute(_id: string, params: any) {
+      const cfg = getConfig(api);
+      const supabase = getSupabase(cfg);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const { data, error } = await supabase.rpc("end_event", {
+        p_code: params.code,
+        p_device_id: deviceId,
+      });
+      if (error) return ok({ error: error.message });
+      return ok(data);
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Tool: antenna_event_join
+  // ═══════════════════════════════════════════════════════════════════
+  api.registerTool({
+    name: "antenna_event_join",
+    description: "Join an event by its code from the event URL.",
+    parameters: {
+      type: "object",
+      properties: {
+        code: { type: "string", description: "Event code" },
+        sender_id: { type: "string" },
+        channel: { type: "string" },
+      },
+      required: ["code", "sender_id", "channel"],
+    },
+    async execute(_id: string, params: any) {
+      const cfg = getConfig(api);
+      const supabase = getSupabase(cfg);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const { data, error } = await supabase.rpc("join_event", { p_code: params.code, p_device_id: deviceId });
+      if (error) return ok({ error: error.message });
+      return ok(data);
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Tool: antenna_event_scan
+  // ═══════════════════════════════════════════════════════════════════
+  api.registerTool({
+    name: "antenna_event_scan",
+    description: "Scan people in an event. No distance limit.",
+    parameters: {
+      type: "object",
+      properties: {
+        code: { type: "string", description: "Event code" },
+        sender_id: { type: "string" },
+        channel: { type: "string" },
+      },
+      required: ["code", "sender_id", "channel"],
+    },
+    async execute(_id: string, params: any) {
+      const cfg = getConfig(api);
+      const supabase = getSupabase(cfg);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+
+      const { data, error } = await supabase.rpc("event_participants_list", { p_code: params.code, p_device_id: deviceId });
+      if (error) return ok({ error: error.message });
+
+      const others = (data || []) as any[];
+      const _refMap: Record<string, string> = {};
+      const profiles = others.map((p, i) => {
+        const ref = String(i + 1);
+        _refMap[ref] = p.device_id;
+        return { ref, emoji: p.emoji || "👤", name: p.display_name || "匿名", line1: p.line1, line2: p.line2, line3: p.line3, source: "event" };
+      });
+
+      (api as any)._antennaRefMap = { ...(api as any)._antennaRefMap, ..._refMap };
+      try { await supabase.rpc("save_scan_refs", { p_owner: deviceId, p_refs: _refMap }); } catch {}
+
+      return ok({ count: profiles.length, profiles, event: true });
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Tool: antenna_pass
+  // ═══════════════════════════════════════════════════════════════════
+  api.registerTool({
+    name: "antenna_pass",
+    description: "Pass/skip a person. They won't be recommended again.",
+    parameters: {
+      type: "object",
+      properties: {
+        sender_id: { type: "string", description: "The sender's user ID" },
+        channel: { type: "string", description: "The channel name" },
+        ref: { type: "string", description: "Ref number from scan/discover results" },
+        target_device_id: { type: "string", description: "Device ID (use ref instead when possible)" },
+      },
+      required: ["sender_id", "channel"],
+    },
+    async execute(_id: string, params: any) {
+      const cfg = getConfig(api);
+      const supabase = getSupabase(cfg);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+
+      let targetId = params.target_device_id;
+      if (!targetId && params.ref) {
+        const { data: resolved } = await supabase.rpc("resolve_ref", { p_owner: deviceId, p_ref: params.ref });
+        targetId = resolved || (api as any)._antennaRefMap?.[params.ref];
+      }
+      if (!targetId) {
+        return ok({ error: "No target. Ref may have expired — try scanning again." });
+      }
+
+      await supabase.rpc("pass_user", { p_device_id: deviceId, p_passed_device_id: targetId });
+      return ok({ passed: true, message: "已跳过，下次不会再推荐这个人。" });
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Tool: antenna_event_checkin
+  // ═════════════════════════════════════════════════════════════════
+  api.registerTool({
+    name: "antenna_event_checkin",
+    description: "Check in at an event — marks you as present at the event location. Optionally updates GPS.",
+    parameters: {
+      type: "object",
+      properties: {
+        code: { type: "string", description: "Event code" },
+        sender_id: { type: "string" },
+        channel: { type: "string" },
+        lat: { type: "number", description: "Latitude (optional)" },
+        lng: { type: "number", description: "Longitude (optional)" },
+      },
+      required: ["code", "sender_id", "channel"],
+    },
+    async execute(_id: string, params: any) {
+      const cfg = getConfig(api);
+      const supabase = getSupabase(cfg);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const fuzzy = (params.lat != null && params.lng != null) ? fuzzyCoords(params.lat, params.lng) : { lat: null, lng: null };
+      const { data, error } = await supabase.rpc("event_checkin", {
+        p_code: params.code,
+        p_device_id: deviceId,
+        p_lat: fuzzy.lat,
+        p_lng: fuzzy.lng,
+      });
+      if (error) return ok({ error: error.message });
+      return ok(data);
+    },
+  });
+
+  // Tool: antenna_event_upload_image
+  // ═════════════════════════════════════════════════════════════════
+  api.registerTool({
+    name: "antenna_event_upload_image",
+    description: "Upload an image for an event OG preview. Returns a public URL.",
+    parameters: {
+      type: "object",
+      properties: {
+        image_base64: { type: "string", description: "Base64-encoded image data" },
+        content_type: { type: "string", description: "MIME type (default image/png)" },
+        event_code: { type: "string", description: "Event code" },
+      },
+      required: ["image_base64", "event_code"],
+    },
+    async execute(_id: string, params: any) {
+      const cfg = getConfig(api);
+      const supabase = getSupabase(cfg);
+      const content_type = params.content_type || "image/png";
+      const ext = content_type.split("/")[1] || "png";
+      const path = `${params.event_code}.${ext}`;
+      const buf = Buffer.from(params.image_base64, "base64");
+      const { error } = await supabase.storage.from("event-images").upload(path, buf, { contentType: content_type, upsert: true });
+      if (error) return ok({ error: error.message });
+      const { data } = supabase.storage.from("event-images").getPublicUrl(path);
+      return ok({ url: data.publicUrl });
+    },
+  });
+
   // Tool: antenna_check_matches
   // ═══════════════════════════════════════════════════════════════════
   api.registerTool({
@@ -584,11 +949,72 @@ export default function register(api: any) {
   const _notifiedMatches = new Set<string>(); // "deviceA→deviceB" already notified
 
   let _pollTimer: ReturnType<typeof setInterval> | null = null;
+  let _realtimeChannel: any = null;
 
   api.registerService({
     id: "antenna-match-poller",
     start: () => {
-      logger.info("Antenna: match poller started (10 min interval, real-time notify)");
+      logger.info("Antenna: match poller started (10 min interval + Supabase Realtime)");
+
+      // ── Supabase Realtime: instant match notifications ──────────
+      try {
+        const rtCfg = getConfig(api);
+        const rtSupabase = getSupabase(rtCfg);
+        _realtimeChannel = rtSupabase
+          .channel('antenna-match-notify')
+          .on('postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'matches' },
+            async (payload: any) => {
+              try {
+                const targetDeviceId = payload.new?.device_id_b;
+                if (!targetDeviceId || !_knownDeviceIds.has(targetDeviceId)) return;
+
+                const key = `${payload.new.device_id_a}→${targetDeviceId}`;
+                if (_notifiedMatches.has(key)) return;
+                _notifiedMatches.add(key);
+
+                const parts = targetDeviceId.split(":");
+                if (parts.length < 2) return;
+                const channel = parts[0];
+                const userId = parts.slice(1).join(":");
+
+                const innerCfg = getConfig(api);
+                const innerSb = getSupabase(innerCfg);
+
+                const { data: theirProfile } = await innerSb.rpc("get_profile", { p_device_id: payload.new.device_id_a });
+                const name = theirProfile?.display_name || "有人";
+                const emoji = theirProfile?.emoji || "👤";
+
+                // Check if mutual
+                const { data: matches } = await innerSb.rpc("get_my_matches", { p_device_id: targetDeviceId });
+                const myAccept = (matches || []).find(
+                  (m: any) => m.device_id_a === targetDeviceId && m.device_id_b === payload.new.device_id_a
+                );
+
+                if (myAccept) {
+                  const contact = payload.new.contact_info_a ? `\n对方的联系方式：${payload.new.contact_info_a}` : "";
+                  notifyUser(channel, userId,
+                    `[Antenna] 🎉 双向匹配！${emoji} ${name} 也接受了你！${contact}\n\n用 antenna_check_matches 查看详情。`,
+                    logger);
+                  stopFollowUpCron(targetDeviceId, payload.new.device_id_a, logger);
+                } else {
+                  notifyUser(channel, userId,
+                    `[Antenna] 📩 ${emoji} ${name} 想认识你！看看 TA 的名片，决定要不要接受？\n\n用 antenna_check_matches 查看详情。`,
+                    logger);
+                }
+              } catch (err: any) {
+                logger.warn("Antenna: realtime match handler error:", err.message);
+              }
+            }
+          )
+          .subscribe((status: string) => {
+            logger.info(`Antenna: realtime subscription status: ${status}`);
+          });
+      } catch (err: any) {
+        logger.warn("Antenna: failed to start realtime subscription, falling back to poll only:", err.message);
+      }
+
+      // ── Poll fallback: catch anything Realtime missed ───────────
       _pollTimer = setInterval(async () => {
         try {
           const cfg = getConfig(api);
@@ -683,7 +1109,15 @@ export default function register(api: any) {
     },
     stop: () => {
       if (_pollTimer) clearInterval(_pollTimer);
-      logger.info("Antenna: match poller stopped");
+      if (_realtimeChannel) {
+        try {
+          const rtCfg = getConfig(api);
+          const rtSupabase = getSupabase(rtCfg);
+          rtSupabase.removeChannel(_realtimeChannel);
+        } catch { /* best effort */ }
+        _realtimeChannel = null;
+      }
+      logger.info("Antenna: match poller + realtime stopped");
     },
   });
 

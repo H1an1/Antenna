@@ -8,9 +8,17 @@ import {
   getProfile,
   setProfile,
   accept,
+  pass,
   checkMatches,
   checkin,
   createBindToken,
+  discover,
+  createEvent,
+  endEvent,
+  eventCheckin,
+  joinEvent,
+  eventScan,
+  uploadEventImage,
   deriveDeviceId,
 } from "./core.js";
 
@@ -29,6 +37,39 @@ export async function startMcpServer() {
   // Store last scan ref map for resolving refs in accept
   let _lastRefMap = {};
 
+  // Track known device_ids and last notified matches for piggyback notifications
+  const _knownDeviceIds = new Set();
+  const _notifiedMatches = new Set();
+
+  // Piggyback match check: append pending notifications to any tool response
+  async function withMatchNotifications(deviceId, result) {
+    _knownDeviceIds.add(deviceId);
+    try {
+      const matches = await checkMatches({ device_id: deviceId });
+      const notifications = [];
+
+      for (const m of (matches.mutual_matches || [])) {
+        const key = `mutual:${m.device_id}`;
+        if (!_notifiedMatches.has(key)) {
+          _notifiedMatches.add(key);
+          notifications.push(`🎉 双向匹配！${m.emoji || "👤"} ${m.name} 也接受了你！${m.their_contact ? "联系方式：" + m.their_contact : ""}`);
+        }
+      }
+      for (const m of (matches.incoming_accepts || [])) {
+        const key = `incoming:${m.device_id}`;
+        if (!_notifiedMatches.has(key)) {
+          _notifiedMatches.add(key);
+          notifications.push(`📩 ${m.emoji || "👤"} ${m.name} 想认识你！用 antenna_check_matches 查看详情。`);
+        }
+      }
+
+      if (notifications.length > 0) {
+        result._pending_notifications = notifications;
+      }
+    } catch { /* silent */ }
+    return result;
+  }
+
   // ─── antenna_scan ──────────────────────────────────────────────────
 
   server.tool(
@@ -43,10 +84,11 @@ export async function startMcpServer() {
     },
     async ({ lat, lng, radius_m, sender_id, channel }) => {
       try {
-        const result = await scan({ lat, lng, radius_m, device_id: deriveDeviceId(sender_id, channel) });
+        const deviceId = deriveDeviceId(sender_id, channel);
+        const result = await scan({ lat, lng, radius_m, device_id: deviceId });
         _lastRefMap = result._ref_map || {};
         const { _ref_map, ...clean } = result;
-        return jsonResult(clean);
+        return jsonResult(await withMatchNotifications(deviceId, clean));
       } catch (e) {
         return jsonResult({ error: e.message });
       }
@@ -67,17 +109,19 @@ export async function startMcpServer() {
       line1: z.string().optional(),
       line2: z.string().optional(),
       line3: z.string().optional(),
+      matching_context: z.string().optional().describe("Agent-generated rich context for better matching (not shown to others)"),
       visible: z.boolean().optional().default(true),
     },
-    async ({ action, sender_id, channel, display_name, emoji, line1, line2, line3, visible }) => {
+    async ({ action, sender_id, channel, display_name, emoji, line1, line2, line3, matching_context, visible }) => {
       const deviceId = deriveDeviceId(sender_id, channel);
       try {
         if (action === "get") {
           const data = await getProfile({ device_id: deviceId });
-          return jsonResult(data ? { profile: data } : { profile: null, message: "还没有名片，帮你创建一个？" });
+          const result = data ? { profile: data } : { profile: null, message: "还没有名片，帮你创建一个？" };
+          return jsonResult(await withMatchNotifications(deviceId, result));
         }
-        const data = await setProfile({ device_id: deviceId, display_name, emoji, line1, line2, line3, visible });
-        return jsonResult({ saved: true, profile: data });
+        const data = await setProfile({ device_id: deviceId, display_name, emoji, line1, line2, line3, matching_context, visible });
+        return jsonResult(await withMatchNotifications(deviceId, { saved: true, profile: data }));
       } catch (e) {
         return jsonResult({ error: e.message });
       }
@@ -98,15 +142,9 @@ export async function startMcpServer() {
     },
     async ({ sender_id, channel, ref, target_device_id, contact_info }) => {
       try {
-        let targetId = target_device_id;
-        if (ref && _lastRefMap[ref]) {
-          targetId = _lastRefMap[ref];
-        }
-        if (!targetId) {
-          return jsonResult({ error: "No target specified. Use 'ref' from scan results or 'target_device_id'." });
-        }
-        const result = await accept({ device_id: deriveDeviceId(sender_id, channel), target_device_id: targetId, contact_info });
-        return jsonResult(result);
+        const deviceId = deriveDeviceId(sender_id, channel);
+        const result = await accept({ device_id: deviceId, target_device_id, ref, contact_info });
+        return jsonResult(await withMatchNotifications(deviceId, result));
       } catch (e) {
         return jsonResult({ error: e.message });
       }
@@ -127,11 +165,12 @@ export async function startMcpServer() {
     },
     async ({ lat, lng, sender_id, channel, place_name }) => {
       try {
-        const result = await checkin({ lat, lng, device_id: deriveDeviceId(sender_id, channel) });
+        const deviceId = deriveDeviceId(sender_id, channel);
+        const result = await checkin({ lat, lng, device_id: deviceId });
         if (result.checked_in && place_name) {
           result.message = `已签到 (${place_name}) 📍 现在附近的人扫描就能看到你了。`;
         }
-        return jsonResult(result);
+        return jsonResult(await withMatchNotifications(deviceId, result));
       } catch (e) {
         return jsonResult({ error: e.message });
       }
@@ -149,7 +188,11 @@ export async function startMcpServer() {
     },
     async ({ sender_id, channel }) => {
       try {
-        const result = await checkMatches({ device_id: deriveDeviceId(sender_id, channel) });
+        const deviceId = deriveDeviceId(sender_id, channel);
+        const result = await checkMatches({ device_id: deviceId });
+        // Mark all as notified since user explicitly checked
+        for (const m of (result.mutual_matches || [])) _notifiedMatches.add(`mutual:${m.device_id}`);
+        for (const m of (result.incoming_accepts || [])) _notifiedMatches.add(`incoming:${m.device_id}`);
         return jsonResult(result);
       } catch (e) {
         return jsonResult({ error: e.message });
@@ -161,18 +204,186 @@ export async function startMcpServer() {
 
   server.tool(
     "antenna_bind",
-    "Generate a GPS binding link. Send this to the user so they can share their phone's location via the web.",
+    "Generate a GPS binding link. Send this to the user so they can share their phone's location via the web. Use purpose='event' + event_code when creating a link for setting an event's location.",
+    {
+      sender_id: z.string().describe("The sender's user ID"),
+      channel: z.string().describe("Channel name"),
+      purpose: z.string().optional().describe("'profile' (default) or 'event'"),
+      event_code: z.string().optional().describe("Event code (required when purpose=event)"),
+    },
+    async ({ sender_id, channel, purpose, event_code }) => {
+      try {
+        const result = await createBindToken({ device_id: deriveDeviceId(sender_id, channel), purpose, event_code });
+        return jsonResult(result);
+      } catch (e) {
+        return jsonResult({ error: e.message });
+      }
+    }
+  );
+
+  // ─── antenna_discover ────────────────────────────────────────
+
+  server.tool(
+    "antenna_discover",
+    "Get today's global recommendation — the person most similar to you worldwide. 1 per day, no repeats.",
     {
       sender_id: z.string().describe("The sender's user ID"),
       channel: z.string().describe("Channel name"),
     },
     async ({ sender_id, channel }) => {
       try {
-        const result = await createBindToken({ device_id: deriveDeviceId(sender_id, channel) });
+        const result = await discover({ device_id: deriveDeviceId(sender_id, channel) });
+        if (result._ref_map) {
+          _lastRefMap = result._ref_map;
+          const { _ref_map, ...clean } = result;
+          return jsonResult(clean);
+        }
         return jsonResult(result);
       } catch (e) {
         return jsonResult({ error: e.message });
       }
+    }
+  );
+
+  // ─── antenna_pass ────────────────────────────────────────────
+
+  server.tool(
+    "antenna_pass",
+    "Pass/skip a person. They won't be recommended again.",
+    {
+      sender_id: z.string().describe("The sender's user ID"),
+      channel: z.string().describe("Channel name"),
+      ref: z.string().optional().describe("Ref number from scan/discover results"),
+      target_device_id: z.string().optional().describe("Device ID (use ref instead)"),
+    },
+    async ({ sender_id, channel, ref, target_device_id }) => {
+      try {
+        const result = await pass({ device_id: deriveDeviceId(sender_id, channel), target_device_id, ref });
+        return jsonResult(result);
+      } catch (e) {
+        return jsonResult({ error: e.message });
+      }
+    }
+  );
+
+  // ─── antenna_event_create ──────────────────────────────────
+
+  server.tool(
+    "antenna_event_create",
+    "Create an event. Returns a shareable link (antenna.fyi/e/CODE) for participants to join.",
+    {
+      name: z.string().describe("Event name"),
+      sender_id: z.string().describe("Creator's user ID"),
+      channel: z.string().describe("Channel name"),
+      lat: z.number().optional().describe("Event latitude"),
+      lng: z.number().optional().describe("Event longitude"),
+      starts_at: z.string().optional().describe("Start time ISO string"),
+      ends_at: z.string().optional().describe("End time ISO string"),
+      description: z.string().optional().describe("Event description"),
+      og_image: z.string().optional().describe("OG image URL for social sharing"),
+    },
+    async ({ name, sender_id, channel, lat, lng, starts_at, ends_at, description, og_image }) => {
+      try {
+        const result = await createEvent({ name, lat, lng, device_id: deriveDeviceId(sender_id, channel), starts_at, ends_at, description, og_image });
+        return jsonResult(result);
+      } catch (e) { return jsonResult({ error: e.message }); }
+    }
+  );
+
+  // ─── antenna_event_upload_image ──────────────────────────────
+
+  server.tool(
+    "antenna_event_upload_image",
+    "Upload an image for an event. Returns a public URL to use as og_image.",
+    {
+      image_base64: z.string().describe("Base64-encoded image data"),
+      content_type: z.string().optional().describe("MIME type (default image/png)"),
+      event_code: z.string().describe("Event code to associate the image with"),
+    },
+    async ({ image_base64, content_type, event_code }) => {
+      try {
+        const url = await uploadEventImage({ image_data: image_base64, content_type, event_code });
+        return jsonResult({ url });
+      } catch (e) { return jsonResult({ error: e.message }); }
+    }
+  );
+
+  // ─── antenna_event_end ───────────────────────────────────────
+
+  server.tool(
+    "antenna_event_end",
+    "End an event. Only the creator can end it.",
+    {
+      code: z.string().describe("Event code"),
+      sender_id: z.string().describe("The sender's user ID"),
+      channel: z.string().describe("Channel name"),
+    },
+    async ({ code, sender_id, channel }) => {
+      try {
+        const result = await endEvent({ code, device_id: deriveDeviceId(sender_id, channel) });
+        return jsonResult(result);
+      } catch (e) { return jsonResult({ error: e.message }); }
+    }
+  );
+
+  // ─── antenna_event_join ────────────────────────────────────
+
+  server.tool(
+    "antenna_event_join",
+    "Join an event by its code. The code is from the event URL (antenna.fyi/e/CODE).",
+    {
+      code: z.string().describe("Event code"),
+      sender_id: z.string().describe("The sender's user ID"),
+      channel: z.string().describe("Channel name"),
+    },
+    async ({ code, sender_id, channel }) => {
+      try {
+        const result = await joinEvent({ code, device_id: deriveDeviceId(sender_id, channel) });
+        return jsonResult(result);
+      } catch (e) { return jsonResult({ error: e.message }); }
+    }
+  );
+
+  // ─── antenna_event_checkin ─────────────────────────────────
+
+  server.tool(
+    "antenna_event_checkin",
+    "Check in at an event — marks you as present at the event location. Optionally updates GPS.",
+    {
+      code: z.string().describe("Event code"),
+      sender_id: z.string().describe("The sender's user ID"),
+      channel: z.string().describe("Channel name"),
+      lat: z.number().optional().describe("Latitude (optional)"),
+      lng: z.number().optional().describe("Longitude (optional)"),
+    },
+    async ({ code, sender_id, channel, lat, lng }) => {
+      try {
+        const result = await eventCheckin({ code, device_id: deriveDeviceId(sender_id, channel), lat, lng });
+        return jsonResult(result);
+      } catch (e) { return jsonResult({ error: e.message }); }
+    }
+  );
+
+  // ─── antenna_event_scan ────────────────────────────────────
+
+  server.tool(
+    "antenna_event_scan",
+    "Scan people in an event. No distance limit — returns all event participants.",
+    {
+      code: z.string().describe("Event code"),
+      sender_id: z.string().describe("The sender's user ID"),
+      channel: z.string().describe("Channel name"),
+    },
+    async ({ code, sender_id, channel }) => {
+      try {
+        const result = await eventScan({ code, device_id: deriveDeviceId(sender_id, channel) });
+        if (result._ref_map) {
+          _lastRefMap = { ..._lastRefMap, ...result._ref_map };
+          const { _ref_map, ...clean } = result;
+          return jsonResult(clean);
+        }
+        return jsonResult(result);
+      } catch (e) { return jsonResult({ error: e.message }); }
     }
   );
 

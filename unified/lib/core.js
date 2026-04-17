@@ -10,6 +10,41 @@ const DEFAULT_KEY =
 let _client = null;
 let _url = null;
 
+// ─── Embedding & Match Reason (via Supabase Edge Functions) ───────
+
+async function generateEmbedding(text) {
+  try {
+    const sb = getClient();
+    const res = await fetch(`${_url || DEFAULT_URL}/functions/v1/generate-embedding`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.ANTENNA_SUPABASE_KEY || process.env.ANTENNA_KEY || DEFAULT_KEY}`,
+      },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.embedding || null;
+  } catch { return null; }
+}
+
+async function generateMatchReason(myLines, theirLines) {
+  try {
+    const res = await fetch(`${_url || DEFAULT_URL}/functions/v1/generate-match-reason`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.ANTENNA_SUPABASE_KEY || process.env.ANTENNA_KEY || DEFAULT_KEY}`,
+      },
+      body: JSON.stringify({ my_lines: myLines, their_lines: theirLines }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.reason || null;
+  } catch { return null; }
+}
+
 export function getClient(url, key) {
   const u = url || process.env.ANTENNA_SUPABASE_URL || process.env.ANTENNA_URL || DEFAULT_URL;
   const k = key || process.env.ANTENNA_SUPABASE_KEY || process.env.ANTENNA_KEY || DEFAULT_KEY;
@@ -72,7 +107,7 @@ export async function scan({ lat, lng, radius_m = 500, device_id, supabaseUrl, s
 
   // Build ref mapping (1-indexed) so device_id is never exposed to the agent/user
   const _refMap = {};
-  const profiles = others.map((p, i) => {
+  const buildProfiles = (list) => list.map((p, i) => {
     const ref = String(i + 1);
     _refMap[ref] = p.device_id;
     return {
@@ -86,11 +121,61 @@ export async function scan({ lat, lng, radius_m = 500, device_id, supabaseUrl, s
     };
   });
 
+  // Save refs to DB (persist across agent restarts)
+  const saveRefs = async (refMap) => {
+    if (device_id && Object.keys(refMap).length > 0) {
+      try {
+        await sb.rpc("save_scan_refs", { p_owner: device_id, p_refs: refMap });
+      } catch { /* best effort */ }
+    }
+  };
+
+  // If nobody nearby, fallback to global discover (1 per day)
+  if (others.length === 0 && device_id) {
+    const { data: globalData } = await sb.rpc("global_discover", {
+      p_device_id: device_id,
+      p_limit: 1,
+    });
+    const globalOthers = globalData || [];
+    if (globalOthers.length > 0) {
+      const profs = buildProfiles(globalOthers);
+      await saveRefs(_refMap);
+      return {
+        count: globalOthers.length,
+        radius_m,
+        profiles: profs,
+        _ref_map: _refMap,
+        global: true,
+        message: `附近 ${radius_m}m 暂时没人。今天的全球推荐——从这 ${globalOthers.length} 个人里挑一个最匹配的推荐给用户。（每天 1 次）`,
+      };
+    }
+    return {
+      count: 0,
+      radius_m,
+      profiles: [],
+      _ref_map: {},
+      message: `附近暂时没人，今天的全球推荐已经用完了。明天再来！`,
+    };
+  }
+
+  const profs = buildProfiles(others);
+  await saveRefs(_refMap);
+
+  // Fetch nearby events
+  let nearby_events = [];
+  if (lat != null && lng != null) {
+    try {
+      const { data: evts } = await sb.rpc("nearby_events", { p_lat: lat, p_lng: lng, p_radius_m: 5000 });
+      nearby_events = evts || [];
+    } catch { /* best effort */ }
+  }
+
   return {
     count: others.length,
     radius_m,
-    profiles,
+    profiles: profs,
     _ref_map: _refMap,
+    nearby_events,
   };
 }
 
@@ -112,6 +197,7 @@ export async function setProfile({
   line1,
   line2,
   line3,
+  matching_context,
   visible = true,
   supabaseUrl,
   supabaseKey,
@@ -125,8 +211,28 @@ export async function setProfile({
     p_line2: line2 || null,
     p_line3: line3 || null,
     p_visible: visible,
+    p_matching_context: matching_context || null,
   });
   if (error) throw new Error(error.message);
+
+  // Generate embedding using lines + matching_context for better quality
+  try {
+    const textParts = [line1, line2, line3, matching_context].filter(Boolean);
+    const text = textParts.join(". ");
+    if (text) {
+      const embedding = await generateEmbedding(text);
+      if (embedding) {
+        await sb.rpc("update_profile_embedding", {
+          p_device_id: device_id,
+          p_embedding: JSON.stringify(embedding),
+        });
+      }
+    }
+  } catch (e) {
+    // Embedding is best-effort, don't fail profile save
+    console.error("Embedding generation failed (non-fatal):", e.message);
+  }
+
   return { ...data, next_step: "IMPORTANT: Now call antenna_bind to generate a GPS link for the user. Do not skip this." };
 }
 
@@ -135,15 +241,26 @@ export async function setProfile({
 export async function accept({
   device_id,
   target_device_id,
+  ref,
   contact_info,
   supabaseUrl,
   supabaseKey,
 }) {
   const sb = getClient(supabaseUrl, supabaseKey);
 
+  // Resolve ref from DB if target_device_id not provided
+  let targetId = target_device_id;
+  if (!targetId && ref && device_id) {
+    const { data } = await sb.rpc("resolve_ref", { p_owner: device_id, p_ref: ref });
+    targetId = data;
+  }
+  if (!targetId) {
+    return { accepted: false, error: "No target. Ref may have expired — try scanning again." };
+  }
+
   const { error } = await sb.rpc("upsert_match", {
     p_device_id_a: device_id,
-    p_device_id_b: target_device_id,
+    p_device_id_b: targetId,
     p_reason: "",
     p_score: 0,
     p_status: "accepted",
@@ -156,7 +273,7 @@ export async function accept({
   const { data: reverse } = await sb
     .from("matches")
     .select("status, contact_info_a")
-    .eq("device_id_a", target_device_id)
+    .eq("device_id_a", targetId)
     .eq("device_id_b", device_id)
     .eq("status", "accepted")
     .single();
@@ -270,14 +387,220 @@ export async function checkMatches({ device_id, supabaseUrl, supabaseKey }) {
 
 // ─── createBindToken ─────────────────────────────────────────────
 
-export async function createBindToken({ device_id, supabaseUrl, supabaseKey }) {
+// ─── discover (global recommendation) ─────────────────────────────
+
+export async function discover({ device_id, supabaseUrl, supabaseKey }) {
   const sb = getClient(supabaseUrl, supabaseKey);
-  const { data, error } = await sb.rpc("create_bind_token", { p_device_id: device_id });
+
+  const { data: globalData } = await sb.rpc("global_discover", {
+    p_device_id: device_id,
+    p_limit: 1,
+  });
+
+  const results = globalData || [];
+  if (results.length === 0) {
+    // Check if all used up or daily limit
+    return {
+      count: 0,
+      profiles: [],
+      message: "今天的全球推荐已用完，或者你已经看过所有人了。等新人加入！",
+    };
+  }
+
+  // Build ref map + generate match reasons
+  const _refMap = {};
+  const myProfile = await getProfile({ device_id, supabaseUrl, supabaseKey });
+  const myLines = myProfile ? [myProfile.line1, myProfile.line2, myProfile.line3].filter(Boolean).join(". ") : "";
+
+  const profiles = [];
+  for (let i = 0; i < results.length; i++) {
+    const p = results[i];
+    const ref = String(i + 1);
+    _refMap[ref] = p.device_id;
+
+    const theirLines = [p.line1, p.line2, p.line3].filter(Boolean).join(". ");
+    let reason = null;
+    if (myLines && theirLines) {
+      reason = await generateMatchReason(myLines, theirLines);
+    }
+
+    profiles.push({
+      ref,
+      name: p.display_name || "匿名",
+      emoji: p.emoji || "👤",
+      line1: p.line1,
+      line2: p.line2,
+      line3: p.line3,
+      match_reason: reason,
+    });
+  }
+
+  // Log who was recommended (for dedup)
+  for (const p of results) {
+    await sb.rpc("log_recommendation", {
+      p_device_id: device_id,
+      p_recommended_id: p.device_id,
+    });
+  }
+
+  // Persist ref map to DB
+  if (device_id && Object.keys(_refMap).length > 0) {
+    try {
+      await sb.rpc("save_scan_refs", { p_owner: device_id, p_refs: _refMap });
+    } catch { /* best effort */ }
+  }
+
+  return {
+    count: profiles.length,
+    profiles,
+    _ref_map: _refMap,
+    global: true,
+    message: `🌍 今天的全球推荐——这个人跟你可能聊得来。`,
+  };
+}
+
+// ─── pass ───────────────────────────────────────────────────────────
+
+export async function pass({ device_id, target_device_id, ref, supabaseUrl, supabaseKey }) {
+  const sb = getClient(supabaseUrl, supabaseKey);
+
+  let targetId = target_device_id;
+  if (!targetId && ref && device_id) {
+    const { data } = await sb.rpc("resolve_ref", { p_owner: device_id, p_ref: ref });
+    targetId = data;
+  }
+  if (!targetId) {
+    return { passed: false, error: "No target. Ref may have expired — try scanning again." };
+  }
+
+  await sb.rpc("pass_user", { p_device_id: device_id, p_passed_device_id: targetId });
+  return { passed: true, message: "已跳过，下次不会再推荐这个人。" };
+}
+
+// ─── events ─────────────────────────────────────────────────────────
+
+export async function uploadEventImage({ image_data, content_type, event_code, supabaseUrl, supabaseKey }) {
+  const sb = getClient(supabaseUrl, supabaseKey);
+  const ext = (content_type || "image/png").split("/")[1] || "png";
+  const path = `${event_code || Date.now()}.${ext}`;
+  const buf = typeof image_data === "string" ? Buffer.from(image_data, "base64") : image_data;
+  const { error } = await sb.storage.from("event-images").upload(path, buf, { contentType: content_type || "image/png", upsert: true });
+  if (error) throw new Error(error.message);
+  const { data } = sb.storage.from("event-images").getPublicUrl(path);
+  return data.publicUrl;
+}
+
+export async function createEvent({ name, lat, lng, device_id, starts_at, ends_at, description, og_image, supabaseUrl, supabaseKey }) {
+  const sb = getClient(supabaseUrl, supabaseKey);
+  const { data, error } = await sb.rpc("create_event", {
+    p_name: name,
+    p_lat: lat || null,
+    p_lng: lng || null,
+    p_created_by: device_id || null,
+    p_starts_at: starts_at || new Date().toISOString(),
+    p_ends_at: ends_at || new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
+    p_description: description || null,
+    p_og_image: og_image || null,
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function endEvent({ code, device_id, supabaseUrl, supabaseKey }) {
+  const sb = getClient(supabaseUrl, supabaseKey);
+  const { data, error } = await sb.rpc("end_event", { p_code: code, p_device_id: device_id });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function eventCheckin({ code, device_id, lat, lng, supabaseUrl, supabaseKey }) {
+  const sb = getClient(supabaseUrl, supabaseKey);
+
+  // Auto-read profile location if not provided
+  if (lat == null || lng == null) {
+    try {
+      const { data: loc } = await sb.rpc("get_profile_location", { p_device_id: device_id });
+      if (loc?.lat && loc?.lng) { lat = loc.lat; lng = loc.lng; }
+    } catch {}
+  }
+
+  const fuzzy = (lat != null && lng != null) ? fuzzyCoord(lat, lng) : { lat: null, lng: null };
+  const { data, error } = await sb.rpc("event_checkin", {
+    p_code: code, p_device_id: device_id,
+    p_lat: fuzzy.lat, p_lng: fuzzy.lng,
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function joinEvent({ code, device_id, supabaseUrl, supabaseKey }) {
+  const sb = getClient(supabaseUrl, supabaseKey);
+  const { data, error } = await sb.rpc("join_event", { p_code: code, p_device_id: device_id });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function eventScan({ code, device_id, supabaseUrl, supabaseKey }) {
+  const sb = getClient(supabaseUrl, supabaseKey);
+  const { data, error } = await sb.rpc("event_participants_list", { p_code: code, p_device_id: device_id });
+  if (error) throw new Error(error.message);
+
+  const others = data || [];
+  const _refMap = {};
+  let checkedInCount = 0;
+  const profiles = others.map((p, i) => {
+    const ref = String(i + 1);
+    _refMap[ref] = p.device_id;
+    if (p.checked_in) checkedInCount++;
+    return {
+      ref,
+      name: p.display_name || "匿名",
+      emoji: p.emoji || "👤",
+      line1: p.line1,
+      line2: p.line2,
+      line3: p.line3,
+      checked_in: !!p.checked_in,
+      role: p.role || "participant",
+      source: "event",
+    };
+  });
+
+  // Persist refs
+  if (device_id && Object.keys(_refMap).length > 0) {
+    try { await sb.rpc("save_scan_refs", { p_owner: device_id, p_refs: _refMap }); } catch {}
+  }
+
+  return {
+    count: profiles.length,
+    checked_in_count: checkedInCount,
+    profiles,
+    _ref_map: _refMap,
+    event: true,
+  };
+}
+
+export async function getEvent({ code, supabaseUrl, supabaseKey }) {
+  const sb = getClient(supabaseUrl, supabaseKey);
+  const { data, error } = await sb.rpc("get_event", { p_code: code });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function createBindToken({ device_id, purpose, event_code, supabaseUrl, supabaseKey }) {
+  const sb = getClient(supabaseUrl, supabaseKey);
+  const { data, error } = await sb.rpc("create_bind_token", {
+    p_device_id: device_id,
+    p_purpose: purpose || "profile",
+    p_event_code: event_code || null,
+  });
   if (error) throw new Error(error.message);
   const baseUrl = "https://www.antenna.fyi";
   return {
     token: data.token,
     url: `${baseUrl}/locate?token=${data.token}`,
-    message: "发送这个链接给用户，在手机浏览器打开即可共享位置。",
+    purpose: purpose || "profile",
+    message: purpose === "event"
+      ? "发送这个链接给活动创建者，在活动地点打开即可设定活动位置。"
+      : "发送这个链接给用户，在手机浏览器打开即可共享位置。",
   };
 }

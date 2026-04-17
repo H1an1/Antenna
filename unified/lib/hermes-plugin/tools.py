@@ -8,6 +8,7 @@ import json
 import math
 import os
 import time
+import urllib.request
 
 try:
     from supabase import create_client
@@ -29,6 +30,7 @@ _client_url = None
 _last_scan: dict[str, float] = {}
 SCAN_DEBOUNCE_S = 30
 _last_ref_map: dict[str, str] = {}  # ref → device_id from last scan
+_my_device_ids: set[str] = set()  # track this user's device_ids for match checking
 
 
 def _get_url():
@@ -53,7 +55,9 @@ def _sb():
 
 
 def _device_id(sender_id: str, channel: str) -> str:
-    return f"{channel}:{sender_id}"
+    did = f"{channel}:{sender_id}"
+    _my_device_ids.add(did)
+    return did
 
 
 def _fuzzy(lat: float, lng: float) -> tuple[float, float]:
@@ -274,17 +278,247 @@ def handle_check_matches(params: dict) -> str:
 BASE_URL = "https://www.antenna.fyi"
 
 
-def handle_bind(params: dict) -> str:
+def handle_pass(params: dict) -> str:
     sb = _sb()
     did = _device_id(params["sender_id"], params["channel"])
 
-    resp = sb.rpc("create_bind_token", {"p_device_id": did}).execute()
+    ref = params.get("ref")
+    target = params.get("target_device_id")
+    if ref and ref in _last_ref_map:
+        target = _last_ref_map[ref]
+    if not target and ref:
+        # Try resolve via RPC
+        try:
+            resp = sb.rpc("resolve_ref", {"p_device_id": did, "p_ref": ref}).execute()
+            if resp.data:
+                target = resp.data.get("target_device_id")
+        except Exception:
+            pass
+    if not target:
+        return _ok({"error": "No target. Use 'ref' from scan/discover results or 'target_device_id'."})
+
+    sb.rpc("pass_user", {
+        "p_device_id": did,
+        "p_target_device_id": target,
+    }).execute()
+
+    return _ok({"passed": True, "message": "已跳过，不会再推荐这个人了。"})
+
+
+def handle_discover(params: dict) -> str:
+    sb = _sb()
+    did = _device_id(params["sender_id"], params["channel"])
+
+    resp = sb.rpc("global_discover", {"p_device_id": did}).execute()
+    results = resp.data or []
+
+    if not results:
+        return _ok({"count": 0, "message": "今天没有新的全球推荐了，明天再来看看。"})
+
+    global _last_ref_map
+    _last_ref_map = {}
+    profiles = []
+
+    # Get my profile for match reason
+    my_prof = sb.rpc("get_profile", {"p_device_id": did}).execute()
+    my_data = my_prof.data or {}
+    my_lines = [my_data.get("line1", ""), my_data.get("line2", ""), my_data.get("line3", "")]
+
+    for i, p in enumerate(results):
+        ref = str(i + 1)
+        _last_ref_map[ref] = p.get("device_id")
+
+        their_lines = [p.get("line1", ""), p.get("line2", ""), p.get("line3", "")]
+
+        # Generate match reason via Edge Function
+        match_reason = None
+        try:
+            req = urllib.request.Request(
+                f"{BUILTIN_URL}/functions/v1/generate-match-reason",
+                data=json.dumps({"my_lines": my_lines, "their_lines": their_lines}).encode(),
+                headers={"Content-Type": "application/json", "Authorization": f"Bearer {BUILTIN_KEY}"},
+            )
+            res = urllib.request.urlopen(req, timeout=10)
+            body = json.loads(res.read().decode())
+            match_reason = body.get("reason")
+        except Exception:
+            pass
+
+        profile = {
+            "ref": ref,
+            "emoji": p.get("emoji") or "\ud83d\udc64",
+            "name": p.get("display_name") or "匿名",
+            "line1": p.get("line1"),
+            "line2": p.get("line2"),
+            "line3": p.get("line3"),
+        }
+        if match_reason:
+            profile["match_reason"] = match_reason
+        profiles.append(profile)
+
+    return _ok({
+        "count": len(profiles),
+        "profiles": profiles,
+        "instruction": "这是全球推荐。根据你对用户的了解，判断是否值得推荐，写一句个性化的匹配理由。使用 ref 编号引用。",
+    })
+
+
+def handle_event_create(params: dict) -> str:
+    sb = _sb()
+    did = _device_id(params["sender_id"], params["channel"])
+
+    rpc_params = {
+        "p_device_id": did,
+        "p_name": params["name"],
+    }
+    if params.get("lat") is not None:
+        rpc_params["p_lat"] = params["lat"]
+    if params.get("lng") is not None:
+        rpc_params["p_lng"] = params["lng"]
+    if params.get("starts_at"):
+        rpc_params["p_starts_at"] = params["starts_at"]
+    if params.get("ends_at"):
+        rpc_params["p_ends_at"] = params["ends_at"]
+    if params.get("description"):
+        rpc_params["p_description"] = params["description"]
+    if params.get("og_image"):
+        rpc_params["p_og_image"] = params["og_image"]
+
+    resp = sb.rpc("create_event", rpc_params).execute()
+    data = resp.data or {}
+
+    code = data.get("code", "")
+    return _ok({
+        "created": True,
+        "name": params["name"],
+        "code": code,
+        "url": f"{BASE_URL}/e/{code}",
+        "message": f"活动已创建！分享链接给参加的人：{BASE_URL}/e/{code}",
+    })
+
+
+def handle_event_join(params: dict) -> str:
+    sb = _sb()
+    did = _device_id(params["sender_id"], params["channel"])
+
+    resp = sb.rpc("join_event", {
+        "p_device_id": did,
+        "p_code": params["code"],
+    }).execute()
+    data = resp.data or {}
+
+    if data.get("joined"):
+        return _ok({"joined": True, "name": data.get("name", ""), "message": f"已加入活动 \"{data.get('name', '')}\"！"})
+    return _ok({"joined": False, "error": data.get("error", "加入失败")})
+
+
+def handle_event_scan(params: dict) -> str:
+    sb = _sb()
+    did = _device_id(params["sender_id"], params["channel"])
+
+    resp = sb.rpc("event_participants_list", {
+        "p_code": params["code"],
+    }).execute()
+    results = resp.data or []
+
+    others = [p for p in results if p.get("device_id") != did]
+
+    if not others:
+        return _ok({"count": 0, "profiles": [], "message": "活动里还没有其他人。"})
+
+    global _last_ref_map
+    _last_ref_map = {}
+    profiles = []
+    for i, p in enumerate(others):
+        ref = str(i + 1)
+        _last_ref_map[ref] = p.get("device_id")
+        profiles.append({
+            "ref": ref,
+            "emoji": p.get("emoji") or "\ud83d\udc64",
+            "name": p.get("display_name") or "匿名",
+            "line1": p.get("line1"),
+            "line2": p.get("line2"),
+            "line3": p.get("line3"),
+            "source": "event",
+        })
+
+    return _ok({
+        "count": len(profiles),
+        "profiles": profiles,
+        "instruction": "这些是活动参加者。根据你对用户的了解，推荐值得认识的人。使用 ref 编号引用。",
+    })
+
+
+def handle_bind(params: dict) -> str:
+    sb = _sb()
+    did = _device_id(params["sender_id"], params["channel"])
+    purpose = params.get("purpose", "profile")
+    event_code = params.get("event_code")
+
+    resp = sb.rpc("create_bind_token", {
+        "p_device_id": did,
+        "p_purpose": purpose,
+        "p_event_code": event_code,
+    }).execute()
     if not resp.data:
         return _ok({"error": "Failed to create bind token"})
 
     token = resp.data.get("token")
+    msg = (
+        "发送这个链接给活动创建者，在活动地点打开即可设定活动位置。"
+        if purpose == "event"
+        else "发送这个链接给用户，在手机浏览器打开即可共享位置。"
+    )
     return _ok({
         "token": token,
         "url": f"{BASE_URL}/locate?token={token}",
-        "message": "发送这个链接给用户，在手机浏览器打开即可共享位置。",
+        "purpose": purpose,
+        "message": msg,
     })
+
+
+def handle_event_end(params: dict) -> str:
+    sb = _sb()
+    did = _device_id(params["sender_id"], params["channel"])
+
+    resp = sb.rpc("end_event", {
+        "p_code": params["code"],
+        "p_device_id": did,
+    }).execute()
+    data = resp.data or {}
+
+    if data.get("ended"):
+        return _ok({"ended": True, "message": f"活动已结束。"})
+    return _ok({"ended": False, "error": data.get("error", "结束活动失败")})
+
+
+def handle_event_upload_image(params: dict) -> str:
+    import base64 as b64mod
+    sb = _sb()
+    content_type = params.get("content_type") or "image/png"
+    ext = content_type.split("/")[1] if "/" in content_type else "png"
+    path = f"{params['event_code']}.{ext}"
+    buf = b64mod.b64decode(params["image_base64"])
+    resp = sb.storage.from_("event-images").upload(path, buf, {"content-type": content_type, "upsert": "true"})
+    pub = sb.storage.from_("event-images").get_public_url(path)
+    return _ok({"url": pub})
+
+
+def handle_event_checkin(params: dict) -> str:
+    sb = _sb()
+    did = _device_id(params["sender_id"], params["channel"])
+
+    lat = params.get("lat")
+    lng = params.get("lng")
+    if lat is not None and lng is not None:
+        flat, flng = _fuzzy(lat, lng)
+    else:
+        flat, flng = None, None
+
+    resp = sb.rpc("event_checkin", {
+        "p_code": params["code"],
+        "p_device_id": did,
+        "p_lat": flat,
+        "p_lng": flng,
+    }).execute()
+    return _ok(resp.data or {})

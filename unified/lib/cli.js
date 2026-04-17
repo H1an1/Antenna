@@ -1,9 +1,9 @@
 // antenna CLI command handlers
 
-import { scan, getProfile, setProfile, accept, checkMatches, checkin, createBindToken } from "./core.js";
+import { scan, getProfile, setProfile, accept, checkMatches, checkin, createBindToken, discover, createEvent, endEvent, eventCheckin, joinEvent, eventScan, pass as passUser, uploadEventImage, getClient } from "./core.js";
 import { createInterface } from "readline";
-import { existsSync, mkdirSync, copyFileSync } from "fs";
-import { join, dirname } from "path";
+import { existsSync, mkdirSync, copyFileSync, readFileSync } from "fs";
+import { join, dirname, extname } from "path";
 import { fileURLToPath } from "url";
 import { homedir } from "os";
 import { execSync } from "child_process";
@@ -16,35 +16,55 @@ export function parseFlags(args) {
   for (let i = 0; i < args.length; i++) {
     if (args[i].startsWith("--")) {
       const key = args[i].slice(2);
-      flags[key] = args[i + 1] || true;
-      i++;
+      const next = args[i + 1];
+      if (next && !next.startsWith("--")) {
+        flags[key] = next;
+        i++;
+      } else {
+        flags[key] = true;
+      }
     }
   }
   return flags;
 }
 
 export async function handleScan(f) {
-  if (!f.lat || !f.lng) return console.error("Usage: antenna scan --lat 39.99 --lng 116.48 [--radius 500] (max 1000) [--id telegram:123]");
+  if (!f.lat && !f.lng && !f.id) return console.error("Usage: antenna scan --lat 39.99 --lng 116.48 [--radius 500] (max 1000) [--id telegram:123]\n  Or just: antenna scan --id telegram:123 (uses saved location from GPS bind)");
   const result = await scan({
-    lat: +f.lat,
-    lng: +f.lng,
+    lat: f.lat ? +f.lat : undefined,
+    lng: f.lng ? +f.lng : undefined,
     radius_m: +(f.radius || 500),
     device_id: f.id || null,
   });
-  if (result.count === 0) return console.log("📡 No one nearby within " + result.radius_m + "m");
-  console.log(`📡 ${result.count} people within ${result.radius_m}m:\n`);
+  if (result.count === 0) return console.log(result.message || "📡 No one nearby");
+  if (result.global) {
+    console.log(`🌍 Global discover (nearby was empty):\n`);
+  } else {
+    console.log(`📡 ${result.count} people within ${result.radius_m}m:\n`);
+  }
   result.profiles.forEach((p) => {
     console.log(`  ${p.emoji} ${p.name}${p.distance_m != null ? ` (${Math.round(p.distance_m)}m)` : ""}`);
     if (p.line1) console.log(`    ${p.line1}`);
     if (p.line2) console.log(`    ${p.line2}`);
     if (p.line3) console.log(`    ${p.line3}`);
-    console.log(`    id: ${p.device_id}\n`);
+    console.log(`    ref: ${p.ref}\n`);
   });
+
+  // Show nearby events
+  if (result.nearby_events?.length) {
+    console.log(`🎉 Nearby events:\n`);
+    result.nearby_events.forEach((e) => {
+      console.log(`  ${e.name} — ${e.participants} people`);
+      if (e.description) console.log(`    ${e.description}`);
+      console.log(`    Join: antenna event --join --code ${e.code}\n`);
+    });
+  }
 }
 
 export async function handleProfile(f) {
   if (!f.id) return console.error("Usage: antenna profile --id telegram:123 [--name Yi --emoji 🦦 --line1 '...' --line2 '...' --line3 '...']");
-  if (f.name || f.line1 || f.line2 || f.line3) {
+  if (f.name || f.line1 || f.line2 || f.line3 || f.visible !== undefined || f.hide !== undefined) {
+    const visible = f.hide ? false : (f.visible !== undefined ? f.visible === 'true' || f.visible === true : undefined);
     const data = await setProfile({
       device_id: f.id,
       display_name: f.name,
@@ -52,6 +72,7 @@ export async function handleProfile(f) {
       line1: f.line1,
       line2: f.line2,
       line3: f.line3,
+      ...(visible !== undefined && { visible }),
     });
     console.log("✅ Profile saved");
     console.log(JSON.stringify(data, null, 2));
@@ -66,10 +87,11 @@ export async function handleProfile(f) {
 }
 
 export async function handleAccept(f) {
-  if (!f.id || !f.target) return console.error("Usage: antenna accept --id telegram:123 --target telegram:789 [--contact 'WeChat: yi']");
+  if (!f.id || (!f.target && !f.ref)) return console.error("Usage: antenna accept --id telegram:123 --ref 1 [--contact 'WeChat: yi']\n       antenna accept --id telegram:123 --target telegram:789 [--contact 'WeChat: yi']");
   const result = await accept({
     device_id: f.id,
-    target_device_id: f.target,
+    target_device_id: f.target || null,
+    ref: f.ref || null,
     contact_info: f.contact,
   });
   console.log("✅ " + result.message);
@@ -106,6 +128,101 @@ export async function handleMatches(f) {
   }
 }
 
+export async function handleDiscover(f) {
+  if (!f.id) return console.error("Usage: antenna discover --id telegram:123");
+  const result = await discover({ device_id: f.id });
+  if (result.count === 0) return console.log(result.message || "🌍 No global recommendation available right now.");
+  console.log(`🌍 Global discover:\n`);
+  result.profiles.forEach((p) => {
+    console.log(`  ${p.emoji} ${p.name}`);
+    if (p.line1) console.log(`    ${p.line1}`);
+    if (p.line2) console.log(`    ${p.line2}`);
+    if (p.line3) console.log(`    ${p.line3}`);
+    if (p.match_reason) console.log(`    → ${p.match_reason}`);
+    console.log(`    ref: ${p.ref}\n`);
+  });
+}
+
+export async function handleEvent(f) {
+  const sub = f._?.[0] || Object.keys(f).find(k => ["create", "join", "scan", "end", "checkin", "upload-image"].includes(k));
+
+  if (f['upload-image']) {
+    if (!f.code || !f.file) return console.error("Usage: antenna event --upload-image --code abc123 --file /path/to/image.png");
+    const fileBuf = readFileSync(f.file);
+    const image_data = fileBuf.toString("base64");
+    const ext = extname(f.file).slice(1) || "png";
+    const mimeMap = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp" };
+    const content_type = mimeMap[ext] || "image/png";
+    const url = await uploadEventImage({ image_data, content_type, event_code: f.code });
+    console.log(`\n✅ Image uploaded!\n`);
+    console.log(`  URL: ${url}\n`);
+    return;
+  }
+
+  if (f.end) {
+    if (!f.code || !f.id) return console.error("Usage: antenna event --end --code abc123 --id telegram:123");
+    const result = await endEvent({ code: f.code, device_id: f.id });
+    if (result.ended) {
+      console.log(`\n✅ Event ended.\n`);
+    } else {
+      console.log(`\n❌ ${result.error || 'Failed to end event'}\n`);
+    }
+    return;
+  }
+
+  if (f.checkin) {
+    if (!f.code || !f.id) return console.error("Usage: antenna event --checkin --code abc123 --id telegram:123 [--lat 34.05 --lng -118.24]");
+    const result = await eventCheckin({ code: f.code, device_id: f.id, lat: f.lat ? +f.lat : undefined, lng: f.lng ? +f.lng : undefined });
+    console.log(`\n✅ Checked in to event.\n`);
+    return;
+  }
+
+  if (f.create || (!f.join && !f.scan && !f.end && f.name)) {
+    if (!f.name) return console.error("Usage: antenna event --create --name 'AI Meetup' [--desc 'description'] [--og-image 'url']");
+    const result = await createEvent({ name: f.name, device_id: f.id || null, lat: f.lat ? +f.lat : undefined, lng: f.lng ? +f.lng : undefined, description: f.desc || undefined, og_image: f['og-image'] || undefined });
+    console.log(`\n🎉 Event created!\n`);
+    console.log(`  Name: ${result.name}`);
+    console.log(`  Code: ${result.code}`);
+    console.log(`  URL:  ${result.url}`);
+    console.log(`  Ends: ${result.ends_at}\n`);
+    return;
+  }
+
+  if (f.join) {
+    if (!f.code || !f.id) return console.error("Usage: antenna event --join --code abc123 --id telegram:123");
+    const result = await joinEvent({ code: f.code, device_id: f.id });
+    if (result.joined) {
+      console.log(`\n✅ Joined "${result.name}" (${result.code})\n`);
+    } else {
+      console.log(`\n❌ ${result.error}\n`);
+    }
+    return;
+  }
+
+  if (f.scan) {
+    if (!f.code) return console.error("Usage: antenna event --scan --code abc123 [--id telegram:123]");
+    const result = await eventScan({ code: f.code, device_id: f.id || null });
+    if (result.count === 0) return console.log("\n🏟️ No participants yet.\n");
+    console.log(`\n🏟️ ${result.count} joined, ${result.checked_in_count || 0} checked in:\n`);
+    result.profiles.forEach((p) => {
+      const badge = p.checked_in ? " ✅" : "";
+      const creatorTag = p.role === "creator" ? " [主办]" : "";
+      console.log(`  ${p.emoji} ${p.name}${creatorTag}${badge}`);
+      if (p.line1) console.log(`    ${p.line1}`);
+      console.log(`    ref: ${p.ref}\n`);
+    });
+    return;
+  }
+
+  console.log(`Usage:
+  antenna event --create --name 'AI Meetup' [--id telegram:123] [--desc 'description'] [--og-image 'url']
+  antenna event --join --code abc123 --id telegram:123
+  antenna event --scan --code abc123 [--id telegram:123]
+  antenna event --checkin --code abc123 --id telegram:123 [--lat 34.05 --lng -118.24]
+  antenna event --end --code abc123 --id telegram:123
+  antenna event --upload-image --code abc123 --file /path/to/image.png`);
+}
+
 export async function handleBind(f) {
   if (!f.id) return console.error("Usage: antenna bind --id telegram:123");
   const result = await createBindToken({ device_id: f.id });
@@ -113,6 +230,17 @@ export async function handleBind(f) {
   console.log(`  ${result.url}\n`);
   console.log("Send this to the user. Opening it on their phone will share GPS with their agent.");
   console.log();
+}
+
+export async function handlePass(f) {
+  if (!f.id) return console.error("Usage: antenna pass --id telegram:123 --target telegram:789");
+  if (!f.target && !f.ref) return console.error("Usage: antenna pass --id telegram:123 --target telegram:789 (or --ref 1)");
+  const result = await passUser({
+    device_id: f.id,
+    target_device_id: f.target,
+    ref: f.ref,
+  });
+  console.log("✅ " + (result.message || "Passed."));
 }
 
 export async function handleSetup(f) {
@@ -276,6 +404,197 @@ export function handleInstallHermesPlugin() {
   console.log();
 }
 
+export async function handleWatch(f) {
+  const id = f.id;
+  if (!id) {
+    console.error("❌ --id required (e.g. --id telegram:123)");
+    process.exit(1);
+  }
+
+  const sb = getClient();
+  const notified = new Set();
+
+  // Detect local agent framework for push notifications
+  let pushMethod = "terminal"; // default: just print
+  try {
+    execSync("which openclaw", { stdio: "pipe" });
+    // Verify gateway is running
+    try {
+      execSync("openclaw gateway health", { stdio: "pipe", timeout: 5000 });
+      pushMethod = "openclaw";
+    } catch { /* gateway not running */ }
+  } catch { /* openclaw not installed */ }
+
+  if (pushMethod === "terminal") {
+    try {
+      execSync("which hermes", { stdio: "pipe" });
+      try {
+        execSync("hermes gateway status", { stdio: "pipe", timeout: 5000 });
+        pushMethod = "hermes";
+      } catch { /* hermes gateway not running */ }
+    } catch { /* hermes not installed */ }
+  }
+
+  console.log(`📡 Watching for new matches for ${id}...`);
+  if (pushMethod === "openclaw") {
+    console.log(`   🔗 Detected OpenClaw — will push notifications to your channel.`);
+  } else if (pushMethod === "hermes") {
+    console.log(`   🔗 Detected Hermes — will push notifications to your channel.`);
+  } else {
+    console.log(`   ℹ️  No agent framework detected — notifications will print here.`);
+  }
+  console.log(`   Press Ctrl+C to stop.\n`);
+
+  // Push notification helper
+  function pushNotify(message) {
+    console.log(message); // always print to terminal
+
+    if (pushMethod === "openclaw") {
+      try {
+        const parts = id.split(":");
+        const channel = parts[0];
+        const userId = parts.slice(1).join(":");
+        execSync(
+          `openclaw agent` +
+          ` --message ${JSON.stringify(message)}` +
+          ` --deliver` +
+          ` --reply-channel ${channel}` +
+          ` --reply-to "${userId}"`,
+          { timeout: 30_000, stdio: "pipe" }
+        );
+      } catch (err) {
+        // silent — terminal output is the fallback
+      }
+    } else if (pushMethod === "hermes") {
+      try {
+        // Use hermes cron to create a one-shot notification
+        const parts = id.split(":");
+        const channel = parts[0];
+        execSync(
+          `hermes cron create` +
+          ` --name "Antenna notification"` +
+          ` --run-now` +
+          ` --once` +
+          ` --message ${JSON.stringify(message)}` +
+          ` --deliver ${channel}`,
+          { timeout: 30_000, stdio: "pipe" }
+        );
+      } catch (err) {
+        // silent — terminal output is the fallback
+      }
+    }
+  }
+
+  // Initial check
+  const initial = await checkMatches({ device_id: id });
+  if (initial.mutual_matches?.length) {
+    console.log(`🎉 You have ${initial.mutual_matches.length} mutual match(es)!`);
+    for (const m of initial.mutual_matches) {
+      const key = `mutual:${m.device_id}`;
+      notified.add(key);
+      console.log(`   ${m.emoji || "👤"} ${m.name}${m.their_contact ? " — contact: " + m.their_contact : ""}`);
+    }
+    console.log();
+  }
+  if (initial.incoming_accepts?.length) {
+    console.log(`📩 ${initial.incoming_accepts.length} person(s) want to meet you!`);
+    for (const m of initial.incoming_accepts) {
+      const key = `incoming:${m.device_id}`;
+      notified.add(key);
+      console.log(`   ${m.emoji || "👤"} ${m.name} — ${m.line1 || ""}`);
+    }
+    console.log();
+  }
+
+  // Subscribe to realtime changes on matches table
+  const channel = sb
+    .channel("antenna-cli-watch")
+    .on("postgres_changes",
+      { event: "INSERT", schema: "public", table: "matches" },
+      async (payload) => {
+        try {
+          const row = payload.new;
+          if (!row) return;
+
+          // Someone accepted me
+          if (row.device_id_b === id) {
+            const key = `incoming:${row.device_id_a}`;
+            if (notified.has(key)) return;
+            notified.add(key);
+
+            const profile = await getProfile({ device_id: row.device_id_a });
+            const name = profile?.display_name || "Someone";
+            const emoji = profile?.emoji || "👤";
+
+            // Check if mutual
+            const matches = await checkMatches({ device_id: id });
+            const isMutual = matches.mutual_matches?.some(m => m.device_id === row.device_id_a);
+
+            if (isMutual) {
+              const mutualKey = `mutual:${row.device_id_a}`;
+              notified.add(mutualKey);
+              const contact = row.contact_info_a;
+              pushNotify(`🎉 MUTUAL MATCH! ${emoji} ${name} also accepted you!${contact ? " Contact: " + contact : ""}`);
+            } else {
+              pushNotify(`📩 ${emoji} ${name} wants to meet you! Run: antenna accept --id ${id} --target ${row.device_id_a}`);
+            }
+          }
+
+          // I accepted someone and they also accepted me
+          if (row.device_id_a === id) {
+            const matches = await checkMatches({ device_id: id });
+            const mutual = matches.mutual_matches?.find(m => m.device_id === row.device_id_b);
+            if (mutual) {
+              const mutualKey = `mutual:${row.device_id_b}`;
+              if (!notified.has(mutualKey)) {
+                notified.add(mutualKey);
+                pushNotify(`🎉 MUTUAL MATCH! ${mutual.emoji || "👤"} ${mutual.name}!${mutual.their_contact ? " Contact: " + mutual.their_contact : ""}`);
+              }
+            }
+          }
+        } catch (err) {
+          // silent
+        }
+      }
+    )
+    .subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        console.log("✅ Connected — listening for matches in real-time.");
+      } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
+        console.log(`⚠️  Connection issue (${status}), retrying...`);
+      }
+    });
+
+  // Keep alive — also poll every 2 minutes as fallback
+  const pollInterval = setInterval(async () => {
+    try {
+      const result = await checkMatches({ device_id: id });
+      for (const m of (result.mutual_matches || [])) {
+        const key = `mutual:${m.device_id}`;
+        if (!notified.has(key)) {
+          notified.add(key);
+          pushNotify(`🎉 MUTUAL MATCH! ${m.emoji || "👤"} ${m.name}!${m.their_contact ? " Contact: " + m.their_contact : ""}`);
+        }
+      }
+      for (const m of (result.incoming_accepts || [])) {
+        const key = `incoming:${m.device_id}`;
+        if (!notified.has(key)) {
+          notified.add(key);
+          pushNotify(`📩 ${m.emoji || "👤"} ${m.name} wants to meet you!`);
+        }
+      }
+    } catch { /* silent */ }
+  }, 2 * 60 * 1000);
+
+  // Handle Ctrl+C
+  process.on("SIGINT", () => {
+    console.log("\n👋 Stopped watching.");
+    clearInterval(pollInterval);
+    sb.removeChannel(channel);
+    process.exit(0);
+  });
+}
+
 export function printHelp() {
   console.log(`📡 Antenna — nearby people discovery
 
@@ -284,7 +603,11 @@ Usage:
   antenna checkin    --id telegram:123 --lat 39.99 --lng 116.48
   antenna profile    --id telegram:123 [--name Yi --emoji 🦦 --line1 '...']
   antenna accept     --id telegram:123 --target telegram:789 [--contact 'WeChat: yi']
+  antenna pass       --id telegram:123 --target telegram:789 (or --ref 1)
   antenna matches    --id telegram:123
+  antenna discover   --id telegram:123
+  antenna event      --create --name 'AI Meetup' [--desc '...'] [--og-image 'url'] | --join --code abc123 | --scan --code abc123 | --end --code abc123 --id telegram:123 | --upload-image --code abc123 --file /path/to/image.png
+  antenna watch       --id telegram:123  Watch for new matches in real-time (Ctrl+C to stop)
   antenna bind       --id telegram:123
   antenna serve      Start MCP server (stdio transport)
   antenna setup      Interactive profile setup [--id telegram:123]
