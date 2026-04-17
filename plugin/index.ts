@@ -134,8 +134,8 @@ function notifyUser(
       `openclaw agent` +
       ` --message ${JSON.stringify(message)}` +
       ` --deliver` +
-      ` --reply-channel ${channel}` +
-      ` --reply-to "${userId}"`,
+      ` --agent main` +
+      ` --to ${channel}:${userId}`,
       { timeout: 30_000, encoding: "utf-8" },
     );
     logger.info(`Antenna: notified ${channel}:${userId}`);
