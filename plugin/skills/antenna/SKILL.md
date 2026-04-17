@@ -6,7 +6,12 @@ metadata: { "openclaw": { "always": true } }
 
 # Antenna — Nearby People Discovery
 
-You have access to the Antenna plugin tools for location-based social discovery.
+You have access to Antenna for location-based social discovery.
+
+**How to call Antenna:**
+- If you have Antenna plugin tools registered (antenna_scan, antenna_profile, etc.) — use them directly.
+- If not, use CLI: `antenna <command> [flags]`. Example: `antenna scan --id telegram:123`. The CLI supports all the same features.
+- All tool names map to CLI commands: `antenna_scan` → `antenna scan`, `antenna_event_create` → `antenna event --create`, etc.
 
 ## Onboarding — 装上之后主动引导
 

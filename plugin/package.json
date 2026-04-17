@@ -1,6 +1,6 @@
 {
   "name": "antenna-openclaw-plugin",
-  "version": "1.2.14",
+  "version": "1.2.15",
   "description": "Antenna — agent-mediated nearby people discovery for OpenClaw",
   "openclaw": {
     "extensions": ["./index.ts"]
