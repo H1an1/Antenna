@@ -368,7 +368,7 @@ def handle_event_create(params: dict) -> str:
     did = _device_id(params["sender_id"], params["channel"])
 
     rpc_params = {
-        "p_device_id": did,
+        "p_created_by": did,
         "p_name": params["name"],
     }
     if params.get("lat") is not None:

@@ -48,6 +48,7 @@ let _supabaseUrl: string | null = null;
 const _lastScanTime = new Map<string, number>();
 const SCAN_DEBOUNCE_MS = 30_000;
 const _knownDeviceIds = new Set<string>();
+const _channelContext = new Map<string, string>(); // device_id → chatId (e.g. discord channel ID)
 
 function getConfig(api: any): AntennaConfig {
   const cfg = api.config?.plugins?.entries?.antenna?.config ?? {};
@@ -122,23 +123,35 @@ function cronJobId(deviceA: string, deviceB: string): string {
   return `antenna-follow-${safe(deviceA)}-${safe(deviceB)}`;
 }
 
-/** Send a real-time notification to a user via openclaw agent --deliver */
+/** Send a real-time notification to a user via openclaw message send */
 function notifyUser(
   channel: string,
   userId: string,
   message: string,
   logger: any,
 ): void {
+  const deviceId = `${channel}:${userId}`;
+  const chatId = _channelContext.get(deviceId);
+
   try {
-    execSync(
-      `openclaw agent` +
-      ` --message ${JSON.stringify(message)}` +
-      ` --deliver` +
-      ` --agent main` +
-      ` --to ${channel}:${userId}`,
-      { timeout: 30_000, encoding: "utf-8" },
-    );
-    logger.info(`Antenna: notified ${channel}:${userId}`);
+    if (chatId) {
+      // Use message send with known chat context
+      execSync(
+        `openclaw message send --channel ${channel} --target ${chatId} -m ${JSON.stringify(message)}`,
+        { timeout: 30_000, encoding: "utf-8" },
+      );
+    } else {
+      // Fallback: try deliver
+      execSync(
+        `openclaw agent` +
+        ` --message ${JSON.stringify(message)}` +
+        ` --deliver` +
+        ` --agent main` +
+        ` --to ${channel}:${userId}`,
+        { timeout: 30_000, encoding: "utf-8" },
+      );
+    }
+    logger.info(`Antenna: notified ${channel}:${userId} (chat=${chatId || 'deliver'})`);
   } catch (err: any) {
     logger.warn(`Antenna: notify failed for ${channel}:${userId}: ${err.message}`);
   }
@@ -1314,6 +1327,16 @@ export default function register(api: any) {
       try {
         const cfg = getConfig(api);
         let hint = "";
+
+        // --- Track chat context for notifications ---
+        const senderId = ctx?.SenderId || ctx?.senderId;
+        const ch = ctx?.Channel || ctx?.channel;
+        const chatId = ctx?.ChatId || ctx?.chatId || ctx?.chat_id;
+        if (senderId && ch && chatId) {
+          const deviceId = `${ch}:${senderId}`;
+          _channelContext.set(deviceId, chatId);
+          _knownDeviceIds.add(deviceId);
+        }
 
         // --- Auto-scan on location ---
         if (cfg.autoScanOnLocation === false) return {};

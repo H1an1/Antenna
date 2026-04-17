@@ -90,8 +90,13 @@ Generate a GPS link for setting event location.
 
 ### When someone shares an event link
 1. Extract the code from `antenna.fyi/events/CODE`
-2. Call `antenna_event_join(code)` — this will auto-check in if applicable
-3. If join fails with "Create a profile first", guide profile creation then retry
+2. Call `antenna_event_join(code)` — this checks everything:
+   - If no profile → "Create a profile first"
+   - If event requires approval and no `application_context` provided → returns `needs_screening: true` + `screening_questions` array
+   - If screening questions returned: **ask the user each question**, collect answers, then call `antenna_event_join(code, application_context="collected answers")` again
+   - If join succeeds with `status: pending` → tell user "waiting for organizer approval"
+   - If join succeeds with `status: active` → user is in!
+3. Auto check-in happens automatically if event has started + GPS within 1km
 
 ### When someone says "who's here" at an event
 1. Call `antenna_event_scan(code)`
