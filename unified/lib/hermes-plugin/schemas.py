@@ -176,7 +176,7 @@ DISCOVER_SCHEMA = {
 EVENT_CREATE_SCHEMA = {
     "name": "antenna_event_create",
     "description": (
-        "Create an event. Returns a shareable link (antenna.fyi/e/CODE) "
+        "Create an event. Returns a shareable link (antenna.fyi/events/CODE) "
         "for participants to join. Optionally include a description and OG image URL."
     ),
     "parameters": {
@@ -191,6 +191,8 @@ EVENT_CREATE_SCHEMA = {
             "ends_at": {"type": "string", "description": "End time ISO"},
             "description": {"type": "string", "description": "Event description"},
             "og_image": {"type": "string", "description": "OG image URL for social sharing"},
+            "requires_approval": {"type": "boolean", "description": "Require host approval to join (default false)"},
+            "screening_questions": {"type": "array", "items": {"type": "string"}, "description": "Screening questions for applicants"},
         },
         "required": ["name", "sender_id", "channel"],
     },
@@ -198,13 +200,16 @@ EVENT_CREATE_SCHEMA = {
 
 EVENT_JOIN_SCHEMA = {
     "name": "antenna_event_join",
-    "description": "Join an event by its code from the event URL.",
+    "description": "Join an event by its code from the event URL. Auto-checks in if event has started and you're within 1km.",
     "parameters": {
         "type": "object",
         "properties": {
             "code": {"type": "string", "description": "Event code"},
             "sender_id": {"type": "string", "description": "The sender's user ID"},
             "channel": {"type": "string", "description": "Platform name"},
+            "lat": {"type": "number", "description": "Latitude (optional, for auto-checkin)"},
+            "lng": {"type": "number", "description": "Longitude (optional, for auto-checkin)"},
+            "application_context": {"type": "string", "description": "Application context from screening conversation"},
         },
         "required": ["code", "sender_id", "channel"],
     },
@@ -265,5 +270,71 @@ EVENT_CHECKIN_SCHEMA = {
             "lng": {"type": "number", "description": "Longitude (optional)"},
         },
         "required": ["code", "sender_id", "channel"],
+    },
+}
+
+EVENT_UPDATE_SCHEMA = {
+    "name": "antenna_event_update",
+    "description": "Update event info. Only creator or co-host can update.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "code": {"type": "string"},
+            "sender_id": {"type": "string"},
+            "channel": {"type": "string"},
+            "name": {"type": "string"},
+            "description": {"type": "string"},
+            "og_image": {"type": "string"},
+            "lat": {"type": "number"},
+            "lng": {"type": "number"},
+            "starts_at": {"type": "string"},
+            "ends_at": {"type": "string"},
+        },
+        "required": ["code", "sender_id", "channel"],
+    },
+}
+
+EVENT_APPROVE_SCHEMA = {
+    "name": "antenna_event_approve",
+    "description": "Approve a pending participant. Only creator or co-host.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "code": {"type": "string"},
+            "sender_id": {"type": "string"},
+            "channel": {"type": "string"},
+            "ref": {"type": "string"},
+        },
+        "required": ["code", "sender_id", "channel", "ref"],
+    },
+}
+
+EVENT_REJECT_SCHEMA = {
+    "name": "antenna_event_reject",
+    "description": "Reject a pending participant. Only creator or co-host.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "code": {"type": "string"},
+            "sender_id": {"type": "string"},
+            "channel": {"type": "string"},
+            "ref": {"type": "string"},
+        },
+        "required": ["code", "sender_id", "channel", "ref"],
+    },
+}
+
+EVENT_ADD_HOST_SCHEMA = {
+    "name": "antenna_event_add_host",
+    "description": "Add a co-host to the event. Only creator can add.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "code": {"type": "string"},
+            "sender_id": {"type": "string"},
+            "channel": {"type": "string"},
+            "ref": {"type": "string"},
+        },
+        "required": ["code", "sender_id", "channel", "ref"],
     },
 }

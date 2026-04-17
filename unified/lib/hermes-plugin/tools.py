@@ -392,8 +392,8 @@ def handle_event_create(params: dict) -> str:
         "created": True,
         "name": params["name"],
         "code": code,
-        "url": f"{BASE_URL}/e/{code}",
-        "message": f"活动已创建！分享链接给参加的人：{BASE_URL}/e/{code}",
+        "url": f"{BASE_URL}/events/{code}",
+        "message": f"活动已创建！分享链接给参加的人：{BASE_URL}/events/{code}",
     })
 
 
@@ -401,15 +401,78 @@ def handle_event_join(params: dict) -> str:
     sb = _sb()
     did = _device_id(params["sender_id"], params["channel"])
 
+    # Profile gate
+    prof = sb.rpc("get_profile", {"p_device_id": did}).execute()
+    if not prof.data:
+        return _ok({"joined": False, "error": "Create a profile first before joining events"})
+
+    lat = params.get("lat")
+    lng = params.get("lng")
+
+    # Auto-read profile location if not provided
+    if lat is None or lng is None:
+        try:
+            loc_resp = sb.rpc("get_profile_location", {"p_device_id": did}).execute()
+            loc = loc_resp.data if loc_resp.data else {}
+            if loc.get("found"):
+                lat = loc["lat"]
+                lng = loc["lng"]
+        except Exception:
+            pass
+
     resp = sb.rpc("join_event", {
         "p_device_id": did,
         "p_code": params["code"],
     }).execute()
     data = resp.data or {}
 
-    if data.get("joined"):
-        return _ok({"joined": True, "name": data.get("name", ""), "message": f"已加入活动 \"{data.get('name', '')}\"！"})
-    return _ok({"joined": False, "error": data.get("error", "加入失败")})
+    if not data.get("joined"):
+        return _ok({"joined": False, "error": data.get("error", "加入失败")})
+
+    # Auto-checkin if event started and we have GPS
+    if lat is not None and lng is not None:
+        try:
+            evt_resp = sb.rpc("get_event", {"p_code": params["code"]}).execute()
+            evt = evt_resp.data or {}
+            import datetime
+            starts_at = evt.get("starts_at")
+            if starts_at:
+                # Parse ISO datetime
+                sa = datetime.datetime.fromisoformat(starts_at.replace("Z", "+00:00"))
+                now = datetime.datetime.now(datetime.timezone.utc)
+                if sa <= now:
+                    evt_lat = evt.get("lat")
+                    evt_lng = evt.get("lng")
+                    do_checkin = True
+                    if evt_lat is not None and evt_lng is not None:
+                        # Haversine distance
+                        R = 6371000
+                        d_lat = math.radians(evt_lat - lat)
+                        d_lng = math.radians(evt_lng - lng)
+                        a = math.sin(d_lat/2)**2 + math.cos(math.radians(lat))*math.cos(math.radians(evt_lat))*math.sin(d_lng/2)**2
+                        dist = R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+                        if dist > 1000:
+                            do_checkin = False
+                            data["checked_in"] = False
+                            data["checkin_reason"] = "too far"
+                            data["distance_m"] = round(dist)
+                    if do_checkin:
+                        flat, flng = _fuzzy(lat, lng)
+                        sb.rpc("event_checkin", {
+                            "p_code": params["code"],
+                            "p_device_id": did,
+                            "p_lat": flat,
+                            "p_lng": flng,
+                        }).execute()
+                        data["checked_in"] = True
+                else:
+                    data["checked_in"] = False
+                    data["checkin_reason"] = "event not started yet"
+        except Exception:
+            data["checked_in"] = False
+            data["checkin_reason"] = "checkin failed"
+
+    return _ok(data)
 
 
 def handle_event_scan(params: dict) -> str:
@@ -522,3 +585,43 @@ def handle_event_checkin(params: dict) -> str:
         "p_lng": flng,
     }).execute()
     return _ok(resp.data or {})
+
+
+def handle_event_update(params: dict) -> str:
+    sb = _sb()
+    did = _device_id(params["sender_id"], params["channel"])
+    resp = sb.rpc("update_event", {
+        "p_code": params["code"], "p_device_id": did,
+        "p_name": params.get("name"), "p_description": params.get("description"),
+        "p_og_image": params.get("og_image"), "p_lat": params.get("lat"),
+        "p_lng": params.get("lng"), "p_starts_at": params.get("starts_at"),
+        "p_ends_at": params.get("ends_at"),
+    }).execute()
+    return _ok(resp.data or {"error": "update failed"})
+
+
+def handle_event_approve(params: dict) -> str:
+    sb = _sb()
+    did = _device_id(params["sender_id"], params["channel"])
+    resp = sb.rpc("approve_participant", {
+        "p_code": params["code"], "p_device_id": did, "p_target_ref": params["ref"],
+    }).execute()
+    return _ok(resp.data or {"error": "approve failed"})
+
+
+def handle_event_reject(params: dict) -> str:
+    sb = _sb()
+    did = _device_id(params["sender_id"], params["channel"])
+    resp = sb.rpc("reject_participant", {
+        "p_code": params["code"], "p_device_id": did, "p_target_ref": params["ref"],
+    }).execute()
+    return _ok(resp.data or {"error": "reject failed"})
+
+
+def handle_event_add_host(params: dict) -> str:
+    sb = _sb()
+    did = _device_id(params["sender_id"], params["channel"])
+    resp = sb.rpc("add_cohost", {
+        "p_code": params["code"], "p_device_id": did, "p_target_ref": params["ref"],
+    }).execute()
+    return _ok(resp.data or {"error": "add_cohost failed"})

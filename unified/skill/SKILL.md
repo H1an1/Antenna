@@ -73,6 +73,24 @@ Scan for nearby people **and events**. Returns raw profile cards + active events
 - `channel`: the channel name (telegram, whatsapp, discord, etc.)
 - Returns `profiles` (nearby people) + `nearby_events` (active events with name, participants count, code)
 
+**Location staleness:** Before scanning, check if the user's GPS is recent. If `last_seen_at` is older than 2 hours, prompt the user to update their location (`antenna_bind` or `antenna_checkin`). Stale GPS = wrong results.
+
+## GPS Logic
+
+**Profile GPS** — the user's location ("where am I")
+- Updated via `antenna_bind(purpose="profile")` or `antenna_checkin`
+- Fuzzy-hashed to ~150m for privacy
+- Used for: `antenna_scan` (nearby people/events), `antenna_event_checkin` (distance check)
+- Has `last_seen_at` timestamp. **Expires conceptually after 2h** — agent should prompt refresh
+
+**Event GPS** — the event's location ("where is the event")
+- Set via `antenna_bind(purpose="event")` or `antenna_event_create(lat, lng)`
+- Precise coordinates (NOT blurred)
+- Used for: check-in distance verification (≤1km), `nearby_events` discovery (5km)
+- Does not expire — event location is fixed
+
+**Relationship:** check-in = compare profile GPS vs event GPS. scan = use profile GPS to find nearby people + events.
+
 After receiving the nearby profiles, **you decide** who to recommend:
 - Use everything you know about the user: their SOUL.md, memory, recent conversations, interests, current mood
 - Compare each nearby person's three-line card against your understanding of the user
@@ -277,7 +295,7 @@ Plugin 自带后台服务，每 10 分钟轮询一次 Supabase 查新的 mutual 
 用户不需要主动问，agent 会自动收到通知。
 
 ### `antenna_event_create`
-Create an event. Returns a shareable link (antenna.fyi/e/CODE).
+Create an event. Returns a shareable link (antenna.fyi/events/CODE).
 - `name`: event name
 - `sender_id`, `channel`: from context
 - `lat`, `lng`: optional event location
@@ -294,7 +312,7 @@ End an event. Only the creator can end it.
 
 ### `antenna_event_join`
 Join an event by code.
-- `code`: from the event URL (antenna.fyi/e/CODE)
+- `code`: from the event URL (antenna.fyi/events/CODE)
 - `sender_id`, `channel`: from context
 
 ### `antenna_event_scan`
@@ -314,3 +332,27 @@ Upload an image for an event OG preview. Returns a public URL.
 - `image_base64`: base64-encoded image data
 - `content_type`: MIME type (default image/png)
 - `event_code`: event code
+
+### `antenna_event_update`
+Update event info. Only creator or co-host can update.
+- `code`: event code
+- `sender_id`, `channel`: from context
+- `name`, `description`, `og_image`, `lat`, `lng`, `starts_at`, `ends_at`: all optional, only provided fields are updated
+
+### `antenna_event_approve`
+Approve a pending participant. Only creator or co-host.
+- `code`: event code
+- `sender_id`, `channel`: from context
+- `ref`: participant ref number from scan
+
+### `antenna_event_reject`
+Reject a pending participant. Only creator or co-host.
+- `code`: event code
+- `sender_id`, `channel`: from context
+- `ref`: participant ref number from scan
+
+### `antenna_event_add_host`
+Add a co-host to the event. Only creator can add.
+- `code`: event code
+- `sender_id`, `channel`: from context
+- `ref`: participant ref number to promote to co-host

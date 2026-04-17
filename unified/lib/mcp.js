@@ -19,6 +19,10 @@ import {
   joinEvent,
   eventScan,
   uploadEventImage,
+  updateEvent,
+  approveParticipant,
+  rejectParticipant,
+  addCohost,
   deriveDeviceId,
 } from "./core.js";
 
@@ -270,7 +274,7 @@ export async function startMcpServer() {
 
   server.tool(
     "antenna_event_create",
-    "Create an event. Returns a shareable link (antenna.fyi/e/CODE) for participants to join.",
+    "Create an event. Returns a shareable link (antenna.fyi/events/CODE) for participants to join.",
     {
       name: z.string().describe("Event name"),
       sender_id: z.string().describe("Creator's user ID"),
@@ -281,10 +285,12 @@ export async function startMcpServer() {
       ends_at: z.string().optional().describe("End time ISO string"),
       description: z.string().optional().describe("Event description"),
       og_image: z.string().optional().describe("OG image URL for social sharing"),
+      requires_approval: z.boolean().optional().describe("Require host approval to join (default false)"),
+      screening_questions: z.array(z.string()).optional().describe("Screening questions for applicants"),
     },
-    async ({ name, sender_id, channel, lat, lng, starts_at, ends_at, description, og_image }) => {
+    async ({ name, sender_id, channel, lat, lng, starts_at, ends_at, description, og_image, requires_approval, screening_questions }) => {
       try {
-        const result = await createEvent({ name, lat, lng, device_id: deriveDeviceId(sender_id, channel), starts_at, ends_at, description, og_image });
+        const result = await createEvent({ name, lat, lng, device_id: deriveDeviceId(sender_id, channel), starts_at, ends_at, description, og_image, requires_approval, screening_questions });
         return jsonResult(result);
       } catch (e) { return jsonResult({ error: e.message }); }
     }
@@ -330,15 +336,18 @@ export async function startMcpServer() {
 
   server.tool(
     "antenna_event_join",
-    "Join an event by its code. The code is from the event URL (antenna.fyi/e/CODE).",
+    "Join an event by its code. The code is from the event URL (antenna.fyi/events/CODE). Auto-checks in if the event has already started and you're within 1km.",
     {
       code: z.string().describe("Event code"),
       sender_id: z.string().describe("The sender's user ID"),
       channel: z.string().describe("Channel name"),
+      lat: z.number().optional().describe("Latitude (optional, for auto-checkin)"),
+      lng: z.number().optional().describe("Longitude (optional, for auto-checkin)"),
+      application_context: z.string().optional().describe("Application context from screening conversation"),
     },
-    async ({ code, sender_id, channel }) => {
+    async ({ code, sender_id, channel, lat, lng, application_context }) => {
       try {
-        const result = await joinEvent({ code, device_id: deriveDeviceId(sender_id, channel) });
+        const result = await joinEvent({ code, device_id: deriveDeviceId(sender_id, channel), lat, lng, application_context });
         return jsonResult(result);
       } catch (e) { return jsonResult({ error: e.message }); }
     }
@@ -382,6 +391,88 @@ export async function startMcpServer() {
           const { _ref_map, ...clean } = result;
           return jsonResult(clean);
         }
+        return jsonResult(result);
+      } catch (e) { return jsonResult({ error: e.message }); }
+    }
+  );
+
+  // ─── antenna_event_update ──────────────────────────────────
+
+  server.tool(
+    "antenna_event_update",
+    "Update event info. Only the creator or co-host can update.",
+    {
+      code: z.string().describe("Event code"),
+      sender_id: z.string().describe("The sender's user ID"),
+      channel: z.string().describe("Channel name"),
+      name: z.string().optional().describe("New event name"),
+      description: z.string().optional().describe("New event description"),
+      og_image: z.string().optional().describe("New OG image URL"),
+      lat: z.number().optional().describe("New event latitude"),
+      lng: z.number().optional().describe("New event longitude"),
+      starts_at: z.string().optional().describe("New start time ISO"),
+      ends_at: z.string().optional().describe("New end time ISO"),
+    },
+    async ({ code, sender_id, channel, name, description, og_image, lat, lng, starts_at, ends_at }) => {
+      try {
+        const result = await updateEvent({ code, device_id: deriveDeviceId(sender_id, channel), name, description, og_image, lat, lng, starts_at, ends_at });
+        return jsonResult(result);
+      } catch (e) { return jsonResult({ error: e.message }); }
+    }
+  );
+
+  // ─── antenna_event_approve ─────────────────────────────────
+
+  server.tool(
+    "antenna_event_approve",
+    "Approve a pending participant. Only the creator or co-host can approve.",
+    {
+      code: z.string().describe("Event code"),
+      sender_id: z.string().describe("The sender's user ID"),
+      channel: z.string().describe("Channel name"),
+      ref: z.string().describe("Ref number of the participant to approve"),
+    },
+    async ({ code, sender_id, channel, ref }) => {
+      try {
+        const result = await approveParticipant({ code, device_id: deriveDeviceId(sender_id, channel), ref });
+        return jsonResult(result);
+      } catch (e) { return jsonResult({ error: e.message }); }
+    }
+  );
+
+  // ─── antenna_event_reject ──────────────────────────────────
+
+  server.tool(
+    "antenna_event_reject",
+    "Reject a pending participant. Only the creator or co-host can reject.",
+    {
+      code: z.string().describe("Event code"),
+      sender_id: z.string().describe("The sender's user ID"),
+      channel: z.string().describe("Channel name"),
+      ref: z.string().describe("Ref number of the participant to reject"),
+    },
+    async ({ code, sender_id, channel, ref }) => {
+      try {
+        const result = await rejectParticipant({ code, device_id: deriveDeviceId(sender_id, channel), ref });
+        return jsonResult(result);
+      } catch (e) { return jsonResult({ error: e.message }); }
+    }
+  );
+
+  // ─── antenna_event_add_host ────────────────────────────────
+
+  server.tool(
+    "antenna_event_add_host",
+    "Add a co-host to an event. Only the creator can add co-hosts.",
+    {
+      code: z.string().describe("Event code"),
+      sender_id: z.string().describe("The sender's user ID"),
+      channel: z.string().describe("Channel name"),
+      ref: z.string().describe("Ref number of the participant to make co-host"),
+    },
+    async ({ code, sender_id, channel, ref }) => {
+      try {
+        const result = await addCohost({ code, device_id: deriveDeviceId(sender_id, channel), ref });
         return jsonResult(result);
       } catch (e) { return jsonResult({ error: e.message }); }
     }

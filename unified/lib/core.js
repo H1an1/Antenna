@@ -490,7 +490,7 @@ export async function uploadEventImage({ image_data, content_type, event_code, s
   return data.publicUrl;
 }
 
-export async function createEvent({ name, lat, lng, device_id, starts_at, ends_at, description, og_image, supabaseUrl, supabaseKey }) {
+export async function createEvent({ name, lat, lng, device_id, starts_at, ends_at, description, og_image, requires_approval, screening_questions, supabaseUrl, supabaseKey }) {
   const sb = getClient(supabaseUrl, supabaseKey);
   const { data, error } = await sb.rpc("create_event", {
     p_name: name,
@@ -501,6 +501,8 @@ export async function createEvent({ name, lat, lng, device_id, starts_at, ends_a
     p_ends_at: ends_at || new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString(),
     p_description: description || null,
     p_og_image: og_image || null,
+    p_requires_approval: requires_approval || false,
+    p_screening_questions: screening_questions || null,
   });
   if (error) throw new Error(error.message);
   return data;
@@ -533,10 +535,69 @@ export async function eventCheckin({ code, device_id, lat, lng, supabaseUrl, sup
   return data;
 }
 
-export async function joinEvent({ code, device_id, supabaseUrl, supabaseKey }) {
+export async function joinEvent({ code, device_id, lat, lng, application_context, supabaseUrl, supabaseKey }) {
   const sb = getClient(supabaseUrl, supabaseKey);
-  const { data, error } = await sb.rpc("join_event", { p_code: code, p_device_id: device_id });
+
+  // Profile gate: check if user has a profile before joining
+  const profile = await getProfile({ device_id, supabaseUrl, supabaseKey });
+  if (!profile) {
+    return { joined: false, error: "Create a profile first before joining events" };
+  }
+
+  // Auto-read profile location if not provided
+  if (lat == null || lng == null) {
+    try {
+      const { data: loc } = await sb.rpc("get_profile_location", { p_device_id: device_id });
+      if (loc?.lat && loc?.lng) { lat = loc.lat; lng = loc.lng; }
+    } catch {}
+  }
+
+  const { data, error } = await sb.rpc("join_event", {
+    p_code: code,
+    p_device_id: device_id,
+    p_application_context: application_context || null,
+  });
   if (error) throw new Error(error.message);
+  if (!data?.joined) return data;
+
+  // Auto-checkin if event has already started and we have GPS
+  if (lat != null && lng != null) {
+    try {
+      const event = await getEvent({ code, supabaseUrl, supabaseKey });
+      const startsAt = event?.starts_at ? new Date(event.starts_at) : null;
+      if (startsAt && startsAt <= new Date()) {
+        // Event has started — attempt auto-checkin
+        if (event.lat != null && event.lng != null) {
+          // Calculate distance (Haversine)
+          const R = 6371000;
+          const dLat = (event.lat - lat) * Math.PI / 180;
+          const dLng = (event.lng - lng) * Math.PI / 180;
+          const a = Math.sin(dLat/2)**2 + Math.cos(lat*Math.PI/180)*Math.cos(event.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+          const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+
+          if (dist <= 1000) {
+            await eventCheckin({ code, device_id, lat, lng, supabaseUrl, supabaseKey });
+            data.checked_in = true;
+          } else {
+            data.checked_in = false;
+            data.checkin_reason = "too far";
+            data.distance_m = Math.round(dist);
+          }
+        } else {
+          // Event has no GPS — checkin without distance check
+          await eventCheckin({ code, device_id, lat, lng, supabaseUrl, supabaseKey });
+          data.checked_in = true;
+        }
+      } else {
+        data.checked_in = false;
+        data.checkin_reason = "event not started yet";
+      }
+    } catch {
+      data.checked_in = false;
+      data.checkin_reason = "checkin failed";
+    }
+  }
+
   return data;
 }
 
@@ -582,6 +643,39 @@ export async function eventScan({ code, device_id, supabaseUrl, supabaseKey }) {
 export async function getEvent({ code, supabaseUrl, supabaseKey }) {
   const sb = getClient(supabaseUrl, supabaseKey);
   const { data, error } = await sb.rpc("get_event", { p_code: code });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function updateEvent({ code, device_id, name, description, og_image, lat, lng, starts_at, ends_at, supabaseUrl, supabaseKey }) {
+  const sb = getClient(supabaseUrl, supabaseKey);
+  const { data, error } = await sb.rpc("update_event", {
+    p_code: code, p_device_id: device_id,
+    p_name: name || null, p_description: description || null,
+    p_og_image: og_image || null, p_lat: lat || null, p_lng: lng || null,
+    p_starts_at: starts_at || null, p_ends_at: ends_at || null,
+  });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function approveParticipant({ code, device_id, ref, supabaseUrl, supabaseKey }) {
+  const sb = getClient(supabaseUrl, supabaseKey);
+  const { data, error } = await sb.rpc("approve_participant", { p_code: code, p_device_id: device_id, p_target_ref: ref });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function rejectParticipant({ code, device_id, ref, supabaseUrl, supabaseKey }) {
+  const sb = getClient(supabaseUrl, supabaseKey);
+  const { data, error } = await sb.rpc("reject_participant", { p_code: code, p_device_id: device_id, p_target_ref: ref });
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+export async function addCohost({ code, device_id, ref, supabaseUrl, supabaseKey }) {
+  const sb = getClient(supabaseUrl, supabaseKey);
+  const { data, error } = await sb.rpc("add_cohost", { p_code: code, p_device_id: device_id, p_target_ref: ref });
   if (error) throw new Error(error.message);
   return data;
 }

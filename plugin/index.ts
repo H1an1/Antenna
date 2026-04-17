@@ -640,7 +640,7 @@ export default function register(api: any) {
   // ═══════════════════════════════════════════════════════════════════
   api.registerTool({
     name: "antenna_event_create",
-    description: "Create an event. Returns a shareable link (antenna.fyi/e/CODE) for participants to join.",
+    description: "Create an event. Returns a shareable link (antenna.fyi/events/CODE) for participants to join.",
     parameters: {
       type: "object",
       properties: {
@@ -653,6 +653,8 @@ export default function register(api: any) {
         ends_at: { type: "string", description: "End time ISO" },
         description: { type: "string", description: "Event description" },
         og_image: { type: "string", description: "OG image URL for social sharing" },
+        requires_approval: { type: "boolean", description: "Require host approval to join (default false)" },
+        screening_questions: { type: "array", items: { type: "string" }, description: "Screening questions for applicants" },
       },
       required: ["name", "sender_id", "channel"],
     },
@@ -669,6 +671,8 @@ export default function register(api: any) {
         p_ends_at: params.ends_at || new Date(Date.now() + 12*60*60*1000).toISOString(),
         p_description: params.description || null,
         p_og_image: params.og_image || null,
+        p_requires_approval: params.requires_approval || false,
+        p_screening_questions: params.screening_questions || null,
       });
       if (error) return ok({ error: error.message });
       return ok(data);
@@ -708,13 +712,16 @@ export default function register(api: any) {
   // ═══════════════════════════════════════════════════════════════════
   api.registerTool({
     name: "antenna_event_join",
-    description: "Join an event by its code from the event URL.",
+    description: "Join an event by its code from the event URL. Auto-checks in if event has started and you're within 1km.",
     parameters: {
       type: "object",
       properties: {
         code: { type: "string", description: "Event code" },
         sender_id: { type: "string" },
         channel: { type: "string" },
+        lat: { type: "number", description: "Latitude (optional, for auto-checkin)" },
+        lng: { type: "number", description: "Longitude (optional, for auto-checkin)" },
+        application_context: { type: "string", description: "Application context from screening conversation" },
       },
       required: ["code", "sender_id", "channel"],
     },
@@ -722,8 +729,64 @@ export default function register(api: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
       const deviceId = deriveDeviceId(params.sender_id, params.channel);
-      const { data, error } = await supabase.rpc("join_event", { p_code: params.code, p_device_id: deviceId });
+
+      // Profile gate
+      const { data: profile } = await supabase.rpc("get_profile", { p_device_id: deviceId });
+      if (!profile) {
+        return ok({ joined: false, error: "Create a profile first before joining events" });
+      }
+
+      let lat = params.lat;
+      let lng = params.lng;
+
+      // Auto-read profile location if not provided
+      if (lat == null || lng == null) {
+        try {
+          const { data: loc } = await supabase.rpc("get_profile_location", { p_device_id: deviceId });
+          if (loc?.found) { lat = loc.lat; lng = loc.lng; }
+        } catch {}
+      }
+
+      const { data, error } = await supabase.rpc("join_event", { p_code: params.code, p_device_id: deviceId, p_application_context: params.application_context || null });
       if (error) return ok({ error: error.message });
+      if (!data?.joined) return ok(data);
+
+      // Auto-checkin if event started and we have GPS
+      if (lat != null && lng != null) {
+        try {
+          const { data: evt } = await supabase.rpc("get_event", { p_code: params.code });
+          const startsAt = evt?.starts_at ? new Date(evt.starts_at) : null;
+          if (startsAt && startsAt <= new Date()) {
+            if (evt.lat != null && evt.lng != null) {
+              const R = 6371000;
+              const dLat = (evt.lat - lat) * Math.PI / 180;
+              const dLng = (evt.lng - lng) * Math.PI / 180;
+              const a = Math.sin(dLat/2)**2 + Math.cos(lat*Math.PI/180)*Math.cos(evt.lat*Math.PI/180)*Math.sin(dLng/2)**2;
+              const dist = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+              if (dist <= 1000) {
+                const fuzzy = fuzzyCoords(lat, lng);
+                await supabase.rpc("event_checkin", { p_code: params.code, p_device_id: deviceId, p_lat: fuzzy.lat, p_lng: fuzzy.lng });
+                data.checked_in = true;
+              } else {
+                data.checked_in = false;
+                data.checkin_reason = "too far";
+                data.distance_m = Math.round(dist);
+              }
+            } else {
+              const fuzzy = fuzzyCoords(lat, lng);
+              await supabase.rpc("event_checkin", { p_code: params.code, p_device_id: deviceId, p_lat: fuzzy.lat, p_lng: fuzzy.lng });
+              data.checked_in = true;
+            }
+          } else {
+            data.checked_in = false;
+            data.checkin_reason = "event not started yet";
+          }
+        } catch {
+          data.checked_in = false;
+          data.checkin_reason = "checkin failed";
+        }
+      }
+
       return ok(data);
     },
   });
@@ -940,6 +1003,127 @@ export default function register(api: any) {
         incoming_accepts: incomingAccepts,
         message: messages.join("；"),
       });
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Tool: antenna_event_update
+  // ═══════════════════════════════════════════════════════════════════
+  api.registerTool({
+    name: "antenna_event_update",
+    description: "Update event info. Only the creator or co-host can update.",
+    parameters: {
+      type: "object",
+      properties: {
+        code: { type: "string", description: "Event code" },
+        sender_id: { type: "string" },
+        channel: { type: "string" },
+        name: { type: "string", description: "New event name" },
+        description: { type: "string", description: "New event description" },
+        og_image: { type: "string", description: "New OG image URL" },
+        lat: { type: "number", description: "New event latitude" },
+        lng: { type: "number", description: "New event longitude" },
+        starts_at: { type: "string", description: "New start time ISO" },
+        ends_at: { type: "string", description: "New end time ISO" },
+      },
+      required: ["code", "sender_id", "channel"],
+    },
+    async execute(_id: string, params: any) {
+      const cfg = getConfig(api);
+      const supabase = getSupabase(cfg);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const { data, error } = await supabase.rpc("update_event", {
+        p_code: params.code, p_device_id: deviceId,
+        p_name: params.name || null, p_description: params.description || null,
+        p_og_image: params.og_image || null, p_lat: params.lat || null, p_lng: params.lng || null,
+        p_starts_at: params.starts_at || null, p_ends_at: params.ends_at || null,
+      });
+      if (error) return ok({ error: error.message });
+      return ok(data);
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Tool: antenna_event_approve
+  // ═══════════════════════════════════════════════════════════════════
+  api.registerTool({
+    name: "antenna_event_approve",
+    description: "Approve a pending participant. Only the creator or co-host can approve.",
+    parameters: {
+      type: "object",
+      properties: {
+        code: { type: "string", description: "Event code" },
+        sender_id: { type: "string" },
+        channel: { type: "string" },
+        ref: { type: "string", description: "Ref number of the participant to approve" },
+      },
+      required: ["code", "sender_id", "channel", "ref"],
+    },
+    async execute(_id: string, params: any) {
+      const cfg = getConfig(api);
+      const supabase = getSupabase(cfg);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const { data, error } = await supabase.rpc("approve_participant", {
+        p_code: params.code, p_device_id: deviceId, p_target_ref: params.ref,
+      });
+      if (error) return ok({ error: error.message });
+      return ok(data);
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Tool: antenna_event_reject
+  // ═══════════════════════════════════════════════════════════════════
+  api.registerTool({
+    name: "antenna_event_reject",
+    description: "Reject a pending participant. Only the creator or co-host can reject.",
+    parameters: {
+      type: "object",
+      properties: {
+        code: { type: "string", description: "Event code" },
+        sender_id: { type: "string" },
+        channel: { type: "string" },
+        ref: { type: "string", description: "Ref number of the participant to reject" },
+      },
+      required: ["code", "sender_id", "channel", "ref"],
+    },
+    async execute(_id: string, params: any) {
+      const cfg = getConfig(api);
+      const supabase = getSupabase(cfg);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const { data, error } = await supabase.rpc("reject_participant", {
+        p_code: params.code, p_device_id: deviceId, p_target_ref: params.ref,
+      });
+      if (error) return ok({ error: error.message });
+      return ok(data);
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Tool: antenna_event_add_host
+  // ═══════════════════════════════════════════════════════════════════
+  api.registerTool({
+    name: "antenna_event_add_host",
+    description: "Add a co-host to an event. Only the creator can add co-hosts.",
+    parameters: {
+      type: "object",
+      properties: {
+        code: { type: "string", description: "Event code" },
+        sender_id: { type: "string" },
+        channel: { type: "string" },
+        ref: { type: "string", description: "Ref number of the participant to make co-host" },
+      },
+      required: ["code", "sender_id", "channel", "ref"],
+    },
+    async execute(_id: string, params: any) {
+      const cfg = getConfig(api);
+      const supabase = getSupabase(cfg);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const { data, error } = await supabase.rpc("add_cohost", {
+        p_code: params.code, p_device_id: deviceId, p_target_ref: params.ref,
+      });
+      if (error) return ok({ error: error.message });
+      return ok(data);
     },
   });
 
