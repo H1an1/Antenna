@@ -7,8 +7,8 @@
 - 跟 Yi 说"改好了测一下"，Yi OK 了再 bump 版本发布
 
 ## 当前版本
-- `antenna-fyi` — 1.2.22
-- `antenna-openclaw-plugin` — 1.2.22
+- `antenna-fyi` — 1.2.23
+- `antenna-openclaw-plugin` — 1.2.23
 
 ## Repos
 - `H1an1/Antenna` — 主 repo（public，开源）

@@ -167,12 +167,6 @@ async function notifyUser(
     logger.warn(`Antenna: notify failed for ${channel}:${userId}: ${err.message}`);
   }
 }
-    }
-    logger.info(`Antenna: notified ${channel}:${userId} (chat=${chatId || 'deliver'})`);
-  } catch (err: any) {
-    logger.warn(`Antenna: notify failed for ${channel}:${userId}: ${err.message}`);
-  }
-}
 
 function startFollowUpCron(
   deviceId: string,
