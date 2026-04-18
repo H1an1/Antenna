@@ -100,9 +100,18 @@ function extractWords(profile: Partial<Profile>): string[] {
   return text.split(/[\s,，。.!！?？、;；:：]+/).filter((w) => w.length > 1);
 }
 
-function deriveDeviceId(senderId: string, channel: string): string {
+function deriveDeviceId(senderId: string, channel: string, chatId?: string): string {
   const id = `${channel}:${senderId}`;
   _knownDeviceIds.add(id);
+  if (chatId) {
+    _channelContext.set(id, chatId);
+    // Persist to DB async
+    try {
+      const cfg = getConfig(api);
+      const sb = getSupabase(cfg);
+      sb.rpc("upsert_profile", { p_device_id: id, p_last_chat_id: chatId }).then(() => {}).catch(() => {});
+    } catch {}
+  }
   return id;
 }
 
@@ -256,14 +265,15 @@ export default function register(api: any) {
         lng: { type: "number", description: "Longitude (optional if location was shared via web)" },
         radius_m: { type: "number", description: "Search radius in meters (default 500, max 1000)" },
         sender_id: { type: "string", description: "The sender's user ID (from message context)" },
-        channel: { type: "string", description: "The channel name (telegram, whatsapp, etc.)" },
+        channel: { type: "string", description: "The channel name" },
+        chat_id: { type: "string", description: "Chat/channel ID for notifications (from message context)" },
       },
       required: ["sender_id", "channel"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
-      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
       const radius = params.radius_m ?? cfg.defaultRadiusM ?? 500;
 
       if (isRateLimited(deviceId)) {
@@ -370,6 +380,7 @@ export default function register(api: any) {
         action: { type: "string", enum: ["get", "set"], description: "'get' to view profile, 'set' to update it" },
         sender_id: { type: "string", description: "The sender's user ID" },
         channel: { type: "string", description: "The channel name" },
+        chat_id: { type: "string", description: "Chat/channel ID for notifications (from message context)" },
         display_name: { type: "string", description: "Display name" },
         emoji: { type: "string", description: "Profile emoji" },
         line1: { type: "string", description: "First line (who you are / what you do)" },
@@ -382,7 +393,7 @@ export default function register(api: any) {
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
-      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
 
       if (params.action === "get") {
         const { data, error } = await supabase.rpc("get_profile", { p_device_id: deviceId });
@@ -428,6 +439,7 @@ export default function register(api: any) {
         lng: { type: "number", description: "Longitude" },
         sender_id: { type: "string", description: "The sender's user ID" },
         channel: { type: "string", description: "The channel name" },
+        chat_id: { type: "string", description: "Chat/channel ID for notifications (from message context)" },
         place_name: { type: "string", description: "Optional: name of the place (for confirmation message)" },
       },
       required: ["lat", "lng", "sender_id", "channel"],
@@ -435,7 +447,7 @@ export default function register(api: any) {
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
-      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
       const fuzzy = fuzzyCoords(params.lat, params.lng);
 
       // Check if user has a profile first
@@ -473,6 +485,7 @@ export default function register(api: any) {
       properties: {
         sender_id: { type: "string" },
         channel: { type: "string" },
+        chat_id: { type: "string", description: "Chat/channel ID for notifications (from message context)" },
         ref: { type: "string", description: "Ref number from scan results (e.g. '1')" },
         target_device_id: { type: "string", description: "Device ID (use ref instead when possible)" },
         contact_info: { type: "string", description: "Optional contact info to share" },
@@ -482,7 +495,7 @@ export default function register(api: any) {
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
-      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
 
       // Resolve ref to device_id — try DB first, then memory fallback
       let targetId = params.target_device_id;
@@ -549,6 +562,7 @@ export default function register(api: any) {
       properties: {
         sender_id: { type: "string", description: "The sender's user ID" },
         channel: { type: "string", description: "The channel name" },
+        chat_id: { type: "string", description: "Chat/channel ID for notifications (from message context)" },
         purpose: { type: "string", description: "'profile' (default) or 'event'" },
         event_code: { type: "string", description: "Event code (required when purpose=event)" },
       },
@@ -557,7 +571,7 @@ export default function register(api: any) {
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
-      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
 
       const { data, error } = await supabase.rpc("create_bind_token", {
         p_device_id: deviceId,
@@ -591,13 +605,14 @@ export default function register(api: any) {
       properties: {
         sender_id: { type: "string", description: "The sender's user ID" },
         channel: { type: "string", description: "The channel name" },
+        chat_id: { type: "string", description: "Chat/channel ID for notifications (from message context)" },
       },
       required: ["sender_id", "channel"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
-      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
 
       const { data: globalData } = await supabase.rpc("global_discover", {
         p_device_id: deviceId, p_limit: 1,
@@ -671,6 +686,7 @@ export default function register(api: any) {
         name: { type: "string", description: "Event name" },
         sender_id: { type: "string" },
         channel: { type: "string" },
+        chat_id: { type: "string", description: "Chat/channel ID for notifications (from message context)" },
         lat: { type: "number", description: "Event latitude" },
         lng: { type: "number", description: "Event longitude" },
         starts_at: { type: "string", description: "Start time ISO" },
@@ -685,7 +701,7 @@ export default function register(api: any) {
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
-      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
       const { data, error } = await supabase.rpc("create_event", {
         p_name: params.name,
         p_lat: params.lat || null,
@@ -715,13 +731,14 @@ export default function register(api: any) {
         code: { type: "string", description: "Event code" },
         sender_id: { type: "string" },
         channel: { type: "string" },
+        chat_id: { type: "string", description: "Chat/channel ID for notifications (from message context)" },
       },
       required: ["code", "sender_id", "channel"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
-      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
       const { data, error } = await supabase.rpc("end_event", {
         p_code: params.code,
         p_device_id: deviceId,
@@ -743,6 +760,7 @@ export default function register(api: any) {
         code: { type: "string", description: "Event code" },
         sender_id: { type: "string" },
         channel: { type: "string" },
+        chat_id: { type: "string", description: "Chat/channel ID for notifications (from message context)" },
         lat: { type: "number", description: "Latitude (optional, for auto-checkin)" },
         lng: { type: "number", description: "Longitude (optional, for auto-checkin)" },
         application_context: { type: "string", description: "Application context from screening conversation" },
@@ -752,7 +770,7 @@ export default function register(api: any) {
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
-      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
 
       // Profile gate
       const { data: profile } = await supabase.rpc("get_profile", { p_device_id: deviceId });
@@ -827,13 +845,14 @@ export default function register(api: any) {
         code: { type: "string", description: "Event code" },
         sender_id: { type: "string" },
         channel: { type: "string" },
+        chat_id: { type: "string", description: "Chat/channel ID for notifications (from message context)" },
       },
       required: ["code", "sender_id", "channel"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
-      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
 
       const { data, error } = await supabase.rpc("event_participants_list", { p_code: params.code, p_device_id: deviceId });
       if (error) return ok({ error: error.message });
@@ -864,6 +883,7 @@ export default function register(api: any) {
       properties: {
         sender_id: { type: "string", description: "The sender's user ID" },
         channel: { type: "string", description: "The channel name" },
+        chat_id: { type: "string", description: "Chat/channel ID for notifications (from message context)" },
         ref: { type: "string", description: "Ref number from scan/discover results" },
         target_device_id: { type: "string", description: "Device ID (use ref instead when possible)" },
       },
@@ -872,7 +892,7 @@ export default function register(api: any) {
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
-      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
 
       let targetId = params.target_device_id;
       if (!targetId && params.ref) {
@@ -900,6 +920,7 @@ export default function register(api: any) {
         code: { type: "string", description: "Event code" },
         sender_id: { type: "string" },
         channel: { type: "string" },
+        chat_id: { type: "string", description: "Chat/channel ID for notifications (from message context)" },
         lat: { type: "number", description: "Latitude (optional)" },
         lng: { type: "number", description: "Longitude (optional)" },
       },
@@ -908,7 +929,7 @@ export default function register(api: any) {
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
-      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
       const fuzzy = (params.lat != null && params.lng != null) ? fuzzyCoords(params.lat, params.lng) : { lat: null, lng: null };
       const { data, error } = await supabase.rpc("event_checkin", {
         p_code: params.code,
@@ -960,13 +981,14 @@ export default function register(api: any) {
       properties: {
         sender_id: { type: "string" },
         channel: { type: "string" },
+        chat_id: { type: "string", description: "Chat/channel ID for notifications (from message context)" },
       },
       required: ["sender_id", "channel"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
-      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
 
       const { data: allMatches } = await supabase.rpc("get_my_matches", { p_device_id: deviceId });
 
@@ -1042,6 +1064,7 @@ export default function register(api: any) {
         code: { type: "string", description: "Event code" },
         sender_id: { type: "string" },
         channel: { type: "string" },
+        chat_id: { type: "string", description: "Chat/channel ID for notifications (from message context)" },
         name: { type: "string", description: "New event name" },
         description: { type: "string", description: "New event description" },
         og_image: { type: "string", description: "New OG image URL" },
@@ -1055,7 +1078,7 @@ export default function register(api: any) {
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
-      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
       const { data, error } = await supabase.rpc("update_event", {
         p_code: params.code, p_device_id: deviceId,
         p_name: params.name || null, p_description: params.description || null,
@@ -1079,6 +1102,7 @@ export default function register(api: any) {
         code: { type: "string", description: "Event code" },
         sender_id: { type: "string" },
         channel: { type: "string" },
+        chat_id: { type: "string", description: "Chat/channel ID for notifications (from message context)" },
         ref: { type: "string", description: "Ref number of the participant to approve" },
       },
       required: ["code", "sender_id", "channel", "ref"],
@@ -1086,7 +1110,7 @@ export default function register(api: any) {
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
-      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
       const { data, error } = await supabase.rpc("approve_participant", {
         p_code: params.code, p_device_id: deviceId, p_target_ref: params.ref,
       });
@@ -1107,6 +1131,7 @@ export default function register(api: any) {
         code: { type: "string", description: "Event code" },
         sender_id: { type: "string" },
         channel: { type: "string" },
+        chat_id: { type: "string", description: "Chat/channel ID for notifications (from message context)" },
         ref: { type: "string", description: "Ref number of the participant to reject" },
       },
       required: ["code", "sender_id", "channel", "ref"],
@@ -1114,7 +1139,7 @@ export default function register(api: any) {
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
-      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
       const { data, error } = await supabase.rpc("reject_participant", {
         p_code: params.code, p_device_id: deviceId, p_target_ref: params.ref,
       });
@@ -1135,6 +1160,7 @@ export default function register(api: any) {
         code: { type: "string", description: "Event code" },
         sender_id: { type: "string" },
         channel: { type: "string" },
+        chat_id: { type: "string", description: "Chat/channel ID for notifications (from message context)" },
         ref: { type: "string", description: "Ref number of the participant to make co-host" },
       },
       required: ["code", "sender_id", "channel", "ref"],
@@ -1142,7 +1168,7 @@ export default function register(api: any) {
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
-      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
       const { data, error } = await supabase.rpc("add_cohost", {
         p_code: params.code, p_device_id: deviceId, p_target_ref: params.ref,
       });

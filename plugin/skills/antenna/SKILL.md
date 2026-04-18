@@ -12,6 +12,7 @@ You have access to Antenna for location-based social discovery.
 - If you have Antenna plugin tools registered (antenna_scan, antenna_profile, etc.) — use them directly.
 - If not, use CLI: `antenna <command> [flags]`. Example: `antenna scan --id telegram:123`. The CLI supports all the same features.
 - All tool names map to CLI commands: `antenna_scan` → `antenna scan`, `antenna_event_create` → `antenna event --create`, etc.
+- **Always pass `chat_id`** when calling any Antenna tool. This is the chat/channel ID from your message context (e.g. Discord channel ID, Telegram chat ID). Antenna uses it to send you notifications about matches and event approvals.
 
 ## Onboarding — 装上之后主动引导
 
