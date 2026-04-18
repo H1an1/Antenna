@@ -2,7 +2,9 @@
 
 import { scan, getProfile, setProfile, accept, checkMatches, checkin, createBindToken, discover, createEvent, endEvent, eventCheckin, joinEvent, eventScan, pass as passUser, uploadEventImage, updateEvent, approveParticipant, rejectParticipant, addCohost, getClient } from "./core.js";
 import { createInterface } from "readline";
-import { existsSync, mkdirSync, copyFileSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync, unlinkSync } from "fs";
+import path from "path";
+import os from "os";
 import { join, dirname, extname } from "path";
 import { fileURLToPath } from "url";
 import { homedir } from "os";
@@ -334,8 +336,20 @@ export async function handleSetup(f) {
 
 export async function handleStatus(f) {
   const supabaseUrl = process.env.ANTENNA_SUPABASE_URL || process.env.ANTENNA_URL || "https://bcudjloikmpcqwcptuyd.supabase.co";
-  console.log("📡 Antenna Status\n");
+  console.log("\n📡 Antenna Status\n");
   console.log(`  Supabase URL: ${supabaseUrl}`);
+
+  // Check watch process
+  const pidFile = path.join(os.homedir(), '.antenna', 'watch.pid');
+  try {
+    if (existsSync(pidFile)) {
+      const pid = parseInt(readFileSync(pidFile, 'utf8').trim());
+      try { process.kill(pid, 0); console.log(`  Watch: ✅ running (PID ${pid})`); }
+      catch { console.log('  Watch: ❌ stale PID file (process dead)'); }
+    } else {
+      console.log('  Watch: ❌ not running');
+    }
+  } catch { console.log('  Watch: ❌ not running'); }
 
   if (f.id) {
     const profile = await getProfile({ device_id: f.id });
@@ -465,6 +479,17 @@ export async function handleWatch(f) {
     console.error("❌ --id required (e.g. --id telegram:123)");
     process.exit(1);
   }
+
+  // Write PID file for health check
+  const pidDir = path.join(os.homedir(), '.antenna');
+  const pidFile = path.join(pidDir, 'watch.pid');
+  try {
+    if (!existsSync(pidDir)) mkdirSync(pidDir, { recursive: true });
+    writeFileSync(pidFile, String(process.pid));
+  } catch {}
+  process.on('exit', () => { try { unlinkSync(pidFile); } catch {} });
+  process.on('SIGINT', () => { try { unlinkSync(pidFile); } catch {} process.exit(0); });
+  process.on('SIGTERM', () => { try { unlinkSync(pidFile); } catch {} process.exit(0); });
 
   const sb = getClient();
   const notified = new Set();

@@ -68,6 +68,8 @@ antenna watch --id <device_id> &
 ```
 这会保持一个 WebSocket 连接，有新匹配或活动审批变更时立即通知。比 cron 更实时。
 
+**Health check:** 每次对话开始时，跑 `antenna status --id <device_id>` 检查 watch 是否在跑。如果显示 "Watch: ❌ not running"，重新启动 `antenna watch --id <device_id> &`。
+
 如果 exec 不支持后台进程，cron 是 fallback。
 
 ## When to use
