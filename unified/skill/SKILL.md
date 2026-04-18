@@ -365,3 +365,41 @@ Add a co-host to the event. Only creator can add.
 - `code`: event code
 - `sender_id`, `channel`: from context
 - `ref`: participant ref number to promote to co-host
+
+---
+
+## Part 2: Event Behavior Guide
+
+### Creating an event
+Collect info through conversation (ask one by one, don't dump all at once):
+1. **Event name** (required) — "活动叫什么名字？"
+2. **Description** — "简单描述一下这个活动？"
+3. **Time** — "什么时候开始？大概多长？" (convert to starts_at / ends_at ISO strings)
+4. **Location** — "活动在哪里？" If user gives an address, geocode it. If vague, generate a bind link after creation.
+5. **Approval** — "需要审批参与者吗？" If yes:
+6. **Screening questions** — "你想问报名者什么问题？" Collect as a list.
+
+Then call `antenna_event_create` with all collected info.
+If no GPS, call `antenna_bind(purpose="event", event_code=CODE)` and send the link.
+Share the event URL with the user.
+
+### Joining an event
+1. Extract the code from `antenna.fyi/events/CODE`
+2. Call `antenna_event_join(code)` — this checks everything:
+   - If no profile → "Create a profile first"
+   - If event requires approval and no `application_context` provided → returns `needs_screening: true` + `screening_questions`
+   - If screening questions returned: **ask the user each question**, collect answers, then call `antenna_event_join(code, application_context="answers")` again
+   - If `status: pending` → "waiting for organizer approval"
+   - If `status: active` → user is in! Auto check-in if event started + GPS within 1km.
+
+### Scanning an event
+1. Call `antenna_event_scan(code)`
+2. Hosts see pending participants with `application_context` (screening answers)
+3. Recommend who to meet based on user's interests
+4. Creator/co-host appears with organizer badge
+
+### Approving/rejecting participants
+Only creator or co-host can approve/reject:
+- `antenna_event_approve(code, ref)` → participant becomes active
+- `antenna_event_reject(code, ref)` → participant is rejected
+- Notifications are sent automatically to the applicant
