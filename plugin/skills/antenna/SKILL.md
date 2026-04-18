@@ -60,6 +60,16 @@ cron 设完后，问用户一句：
 用户说要 → cron 每天调 `antenna_discover` 推送。
 用户说不要 → 只在 scan 没人时 fallback。
 
+**第六步：启动实时通知**
+
+onboarding 完成后，启动 `antenna watch` 后台进程，实时接收匹配通知和活动审批通知：
+```
+antenna watch --id <device_id> &
+```
+这会保持一个 WebSocket 连接，有新匹配或活动审批变更时立即通知。比 cron 更实时。
+
+如果 exec 不支持后台进程，cron 是 fallback。
+
 ## When to use
 
 - **首次安装后**: 主动开始 onboarding（名片 → 位置）

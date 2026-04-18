@@ -54,9 +54,16 @@ def _sb():
     return _client
 
 
-def _device_id(sender_id: str, channel: str) -> str:
+def _device_id(sender_id: str, channel: str, chat_id: str = None) -> str:
     did = f"{channel}:{sender_id}"
     _my_device_ids.add(did)
+    # Persist chat_id for notifications
+    if chat_id:
+        try:
+            sb = _sb()
+            sb.rpc("upsert_profile", {"p_device_id": did, "p_last_chat_id": chat_id}).execute()
+        except Exception:
+            pass
     return did
 
 
@@ -72,7 +79,7 @@ def _ok(data) -> str:
 
 def handle_scan(params: dict) -> str:
     sb = _sb()
-    did = _device_id(params["sender_id"], params["channel"])
+    did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
     radius = params.get("radius_m", 500)
 
     # Rate limit
@@ -137,7 +144,7 @@ def handle_scan(params: dict) -> str:
 
 def handle_profile(params: dict) -> str:
     sb = _sb()
-    did = _device_id(params["sender_id"], params["channel"])
+    did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
 
     if params["action"] == "get":
         resp = sb.rpc("get_profile", {"p_device_id": did}).execute()
@@ -163,7 +170,7 @@ def handle_profile(params: dict) -> str:
 
 def handle_accept(params: dict) -> str:
     sb = _sb()
-    did = _device_id(params["sender_id"], params["channel"])
+    did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
 
     # Resolve ref to device_id
     ref = params.get("ref")
@@ -202,7 +209,7 @@ def handle_accept(params: dict) -> str:
 
 def handle_checkin(params: dict) -> str:
     sb = _sb()
-    did = _device_id(params["sender_id"], params["channel"])
+    did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
     flat, flng = _fuzzy(params["lat"], params["lng"])
 
     # Check profile exists
@@ -220,7 +227,7 @@ def handle_checkin(params: dict) -> str:
 
 def handle_check_matches(params: dict) -> str:
     sb = _sb()
-    did = _device_id(params["sender_id"], params["channel"])
+    did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
 
     resp = sb.rpc("get_my_matches", {"p_device_id": did}).execute()
     all_matches = resp.data or []
@@ -280,7 +287,7 @@ BASE_URL = "https://www.antenna.fyi"
 
 def handle_pass(params: dict) -> str:
     sb = _sb()
-    did = _device_id(params["sender_id"], params["channel"])
+    did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
 
     ref = params.get("ref")
     target = params.get("target_device_id")
@@ -307,7 +314,7 @@ def handle_pass(params: dict) -> str:
 
 def handle_discover(params: dict) -> str:
     sb = _sb()
-    did = _device_id(params["sender_id"], params["channel"])
+    did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
 
     resp = sb.rpc("global_discover", {"p_device_id": did}).execute()
     results = resp.data or []
@@ -365,7 +372,7 @@ def handle_discover(params: dict) -> str:
 
 def handle_event_create(params: dict) -> str:
     sb = _sb()
-    did = _device_id(params["sender_id"], params["channel"])
+    did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
 
     rpc_params = {
         "p_created_by": did,
@@ -403,7 +410,7 @@ def handle_event_create(params: dict) -> str:
 
 def handle_event_join(params: dict) -> str:
     sb = _sb()
-    did = _device_id(params["sender_id"], params["channel"])
+    did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
 
     # Profile gate
     prof = sb.rpc("get_profile", {"p_device_id": did}).execute()
@@ -484,10 +491,10 @@ def handle_event_join(params: dict) -> str:
 
 def handle_event_scan(params: dict) -> str:
     sb = _sb()
-    did = _device_id(params["sender_id"], params["channel"])
+    did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
 
     resp = sb.rpc("event_participants_list", {
-        "p_code": params["code"],
+        "p_code": params["code"], "p_device_id": did,
     }).execute()
     results = resp.data or []
 
@@ -497,31 +504,39 @@ def handle_event_scan(params: dict) -> str:
         return _ok({"count": 0, "profiles": [], "message": "活动里还没有其他人。"})
 
     global _last_ref_map
+    global _last_ref_map
     _last_ref_map = {}
+    checked_in_count = 0
     profiles = []
     for i, p in enumerate(others):
         ref = str(i + 1)
         _last_ref_map[ref] = p.get("device_id")
+        if p.get("checked_in"):
+            checked_in_count += 1
         profiles.append({
             "ref": ref,
-            "emoji": p.get("emoji") or "\ud83d\udc64",
+            "emoji": p.get("emoji") or "👤",
             "name": p.get("display_name") or "匿名",
             "line1": p.get("line1"),
             "line2": p.get("line2"),
             "line3": p.get("line3"),
+            "checked_in": bool(p.get("checked_in")),
+            "role": p.get("role") or "participant",
+            "status": p.get("status") or "active",
+            "application_context": p.get("application_context"),
             "source": "event",
         })
 
     return _ok({
         "count": len(profiles),
+        "checked_in_count": checked_in_count,
         "profiles": profiles,
         "instruction": "这些是活动参加者。根据你对用户的了解，推荐值得认识的人。使用 ref 编号引用。",
     })
 
-
 def handle_bind(params: dict) -> str:
     sb = _sb()
-    did = _device_id(params["sender_id"], params["channel"])
+    did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
     purpose = params.get("purpose", "profile")
     event_code = params.get("event_code")
 
@@ -549,7 +564,7 @@ def handle_bind(params: dict) -> str:
 
 def handle_event_end(params: dict) -> str:
     sb = _sb()
-    did = _device_id(params["sender_id"], params["channel"])
+    did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
 
     resp = sb.rpc("end_event", {
         "p_code": params["code"],
@@ -576,7 +591,7 @@ def handle_event_upload_image(params: dict) -> str:
 
 def handle_event_checkin(params: dict) -> str:
     sb = _sb()
-    did = _device_id(params["sender_id"], params["channel"])
+    did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
 
     lat = params.get("lat")
     lng = params.get("lng")
@@ -596,7 +611,7 @@ def handle_event_checkin(params: dict) -> str:
 
 def handle_event_update(params: dict) -> str:
     sb = _sb()
-    did = _device_id(params["sender_id"], params["channel"])
+    did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
     resp = sb.rpc("update_event", {
         "p_code": params["code"], "p_device_id": did,
         "p_name": params.get("name"), "p_description": params.get("description"),
@@ -609,7 +624,7 @@ def handle_event_update(params: dict) -> str:
 
 def handle_event_approve(params: dict) -> str:
     sb = _sb()
-    did = _device_id(params["sender_id"], params["channel"])
+    did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
     resp = sb.rpc("approve_participant", {
         "p_code": params["code"], "p_device_id": did, "p_target_ref": params["ref"],
     }).execute()
@@ -618,7 +633,7 @@ def handle_event_approve(params: dict) -> str:
 
 def handle_event_reject(params: dict) -> str:
     sb = _sb()
-    did = _device_id(params["sender_id"], params["channel"])
+    did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
     resp = sb.rpc("reject_participant", {
         "p_code": params["code"], "p_device_id": did, "p_target_ref": params["ref"],
     }).execute()
@@ -627,7 +642,7 @@ def handle_event_reject(params: dict) -> str:
 
 def handle_event_add_host(params: dict) -> str:
     sb = _sb()
-    did = _device_id(params["sender_id"], params["channel"])
+    did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
     resp = sb.rpc("add_cohost", {
         "p_code": params["code"], "p_device_id": did, "p_target_ref": params["ref"],
     }).execute()

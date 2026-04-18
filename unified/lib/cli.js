@@ -501,42 +501,35 @@ export async function handleWatch(f) {
   console.log(`   Press Ctrl+C to stop.\n`);
 
   // Push notification helper
-  function pushNotify(message) {
+  async function pushNotify(message) {
     console.log(message); // always print to terminal
 
     if (pushMethod === "openclaw") {
       try {
+        // Try to get chat_id from DB for direct message send
+        const profile = await getProfile({ device_id: id });
+        const chatId = profile?.last_chat_id;
         const parts = id.split(":");
-        const channel = parts[0];
-        const userId = parts.slice(1).join(":");
-        execSync(
-          `openclaw agent` +
-          ` --message ${JSON.stringify(message)}` +
-          ` --deliver` +
-          ` --reply-channel ${channel}` +
-          ` --reply-to "${userId}"`,
-          { timeout: 30_000, stdio: "pipe" }
-        );
-      } catch (err) {
-        // silent — terminal output is the fallback
-      }
+        const chan = parts[0];
+        if (chatId) {
+          execSync(
+            `openclaw message send --channel ${chan} --target ${chatId} -m ${JSON.stringify(message)}`,
+            { timeout: 30_000, stdio: "pipe" }
+          );
+        } else {
+          execSync(
+            `openclaw agent --message ${JSON.stringify(message)} --deliver --agent main --to ${id}`,
+            { timeout: 30_000, stdio: "pipe" }
+          );
+        }
+      } catch (err) { /* terminal output is the fallback */ }
     } else if (pushMethod === "hermes") {
       try {
-        // Use hermes cron to create a one-shot notification
-        const parts = id.split(":");
-        const channel = parts[0];
         execSync(
-          `hermes cron create` +
-          ` --name "Antenna notification"` +
-          ` --run-now` +
-          ` --once` +
-          ` --message ${JSON.stringify(message)}` +
-          ` --deliver ${channel}`,
+          `hermes cron create --name "Antenna notification" --run-now --once --message ${JSON.stringify(message)}`,
           { timeout: 30_000, stdio: "pipe" }
         );
-      } catch (err) {
-        // silent — terminal output is the fallback
-      }
+      } catch (err) { /* terminal output is the fallback */ }
     }
   }
 
@@ -617,6 +610,50 @@ export async function handleWatch(f) {
         console.log("✅ Connected — listening for matches in real-time.");
       } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
         console.log(`⚠️  Connection issue (${status}), retrying...`);
+      }
+    });
+
+  // Subscribe to event_participants changes (approval notifications)
+  sb
+    .channel("antenna-cli-watch-events")
+    .on("postgres_changes",
+      { event: "INSERT", schema: "public", table: "event_participants" },
+      async (payload) => {
+        try {
+          const row = payload.new;
+          if (!row || row.status !== "pending") return;
+          // Someone applied to my event — check if I'm the creator
+          const event = await sb.rpc("get_event_by_id", { p_event_id: row.event_id }).then(r => r.data);
+          if (!event?.found || event.created_by !== id) return;
+          const applicant = await getProfile({ device_id: row.device_id });
+          const name = applicant?.display_name || "Someone";
+          const emoji = applicant?.emoji || "👤";
+          pushNotify(`📩 ${emoji} ${name} applied to join \"${event.name}\"! Run: antenna event --scan --code ${event.code} --id ${id}`);
+        } catch {}
+      }
+    )
+    .on("postgres_changes",
+      { event: "UPDATE", schema: "public", table: "event_participants" },
+      async (payload) => {
+        try {
+          const row = payload.new;
+          const old = payload.old;
+          if (!row || !old) return;
+          // My application was approved/rejected
+          if (row.device_id !== id) return;
+          if (old.status === "pending" && row.status === "active") {
+            const event = await sb.rpc("get_event_by_id", { p_event_id: row.event_id }).then(r => r.data);
+            pushNotify(`✅ Your application to \"${event?.name || 'an event'}\" was approved! You're in.`);
+          } else if (old.status === "pending" && row.status === "rejected") {
+            const event = await sb.rpc("get_event_by_id", { p_event_id: row.event_id }).then(r => r.data);
+            pushNotify(`❌ Your application to \"${event?.name || 'an event'}\" was not approved.`);
+          }
+        } catch {}
+      }
+    )
+    .subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        console.log("✅ Connected — listening for event notifications.");
       }
     });
 

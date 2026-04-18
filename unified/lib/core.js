@@ -502,7 +502,7 @@ export async function createEvent({ name, lat, lng, device_id, starts_at, ends_a
     p_description: description || null,
     p_og_image: og_image || null,
     p_requires_approval: requires_approval || false,
-    p_screening_questions: screening_questions || null,
+    p_screening_questions: screening_questions ? screening_questions.flatMap(q => q.includes('|') || q.includes('｜') ? q.split(/[|\uff5c]/).map(s => s.trim()).filter(Boolean) : [q]) : null,
   });
   if (error) throw new Error(error.message);
   return data;

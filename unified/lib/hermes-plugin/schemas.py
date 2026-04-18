@@ -44,6 +44,7 @@ PROFILE_SCHEMA = {
             },
             "sender_id": {"type": "string"},
             "channel": {"type": "string"},
+            "chat_id": {"type": "string", "description": "Chat/channel ID for notifications"},
             "display_name": {"type": "string", "description": "Display name"},
             "emoji": {"type": "string", "description": "Profile emoji"},
             "line1": {"type": "string", "description": "Who you are / what you do"},
@@ -66,6 +67,7 @@ ACCEPT_SCHEMA = {
         "properties": {
             "sender_id": {"type": "string"},
             "channel": {"type": "string"},
+            "chat_id": {"type": "string", "description": "Chat/channel ID for notifications"},
             "ref": {
                 "type": "string",
                 "description": "Ref number from scan results (e.g. '1')",
@@ -95,6 +97,7 @@ CHECKIN_SCHEMA = {
             "lng": {"type": "number", "description": "Longitude"},
             "sender_id": {"type": "string"},
             "channel": {"type": "string"},
+            "chat_id": {"type": "string", "description": "Chat/channel ID for notifications"},
             "place_name": {
                 "type": "string",
                 "description": "Name of the place (optional)",
@@ -114,6 +117,7 @@ CHECK_MATCHES_SCHEMA = {
         "properties": {
             "sender_id": {"type": "string"},
             "channel": {"type": "string"},
+            "chat_id": {"type": "string", "description": "Chat/channel ID for notifications"},
         },
         "required": ["sender_id", "channel"],
     },
@@ -129,6 +133,7 @@ BIND_SCHEMA = {
         "properties": {
             "sender_id": {"type": "string"},
             "channel": {"type": "string"},
+            "chat_id": {"type": "string", "description": "Chat/channel ID for notifications"},
             "purpose": {"type": "string", "description": "'profile' (default) or 'event'"},
             "event_code": {"type": "string", "description": "Event code (when purpose=event)"},
         },
@@ -282,6 +287,7 @@ EVENT_UPDATE_SCHEMA = {
             "code": {"type": "string"},
             "sender_id": {"type": "string"},
             "channel": {"type": "string"},
+            "chat_id": {"type": "string", "description": "Chat/channel ID for notifications"},
             "name": {"type": "string"},
             "description": {"type": "string"},
             "og_image": {"type": "string"},
@@ -303,6 +309,7 @@ EVENT_APPROVE_SCHEMA = {
             "code": {"type": "string"},
             "sender_id": {"type": "string"},
             "channel": {"type": "string"},
+            "chat_id": {"type": "string", "description": "Chat/channel ID for notifications"},
             "ref": {"type": "string"},
         },
         "required": ["code", "sender_id", "channel", "ref"],
@@ -318,6 +325,7 @@ EVENT_REJECT_SCHEMA = {
             "code": {"type": "string"},
             "sender_id": {"type": "string"},
             "channel": {"type": "string"},
+            "chat_id": {"type": "string", "description": "Chat/channel ID for notifications"},
             "ref": {"type": "string"},
         },
         "required": ["code", "sender_id", "channel", "ref"],
@@ -333,6 +341,7 @@ EVENT_ADD_HOST_SCHEMA = {
             "code": {"type": "string"},
             "sender_id": {"type": "string"},
             "channel": {"type": "string"},
+            "chat_id": {"type": "string", "description": "Chat/channel ID for notifications"},
             "ref": {"type": "string"},
         },
         "required": ["code", "sender_id", "channel", "ref"],
