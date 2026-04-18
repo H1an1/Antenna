@@ -515,19 +515,36 @@ export async function handleWatch(f) {
     } catch { /* hermes not installed */ }
   }
 
-  console.log(`📡 Watching for new matches for ${id}...`);
+  // Force stdout blocking mode for non-TTY environments (Hermes exec)
+  try { if (process.stdout._handle) process.stdout._handle.setBlocking(true); } catch {}
+
+  // Log to file as fallback
+  const logDir = path.join(os.homedir(), '.antenna');
+  const logFile = path.join(logDir, 'watch.log');
+  try { if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true }); } catch {}
+  const logStream = await import('fs').then(fs => fs.createWriteStream(logFile, { flags: 'a' }));
+  const _log = (msg) => {
+    const line = `[${new Date().toISOString()}] ${msg}`;
+    console.log(msg);
+    try { logStream.write(line + '\n'); } catch {}
+  };
+
+  _log(`📡 Watching for new matches for ${id}...`);
   if (pushMethod === "openclaw") {
-    console.log(`   🔗 Detected OpenClaw — will push notifications to your channel.`);
+    _log(`   🔗 Detected OpenClaw — will push notifications to your channel.`);
   } else if (pushMethod === "hermes") {
-    console.log(`   🔗 Detected Hermes — will push notifications to your channel.`);
+    _log(`   🔗 Detected Hermes — will push notifications to your channel.`);
   } else {
-    console.log(`   ℹ️  No agent framework detected — notifications will print here.`);
+    _log(`   ℹ️  No agent framework detected — notifications will print here.`);
   }
-  console.log(`   Press Ctrl+C to stop.\n`);
+  _log(`   Press Ctrl+C to stop.\n`);
+
+  // Keep process alive (prevent exit when backgrounded)
+  process.stdin.resume();
 
   // Push notification helper
   async function pushNotify(message) {
-    console.log(message); // always print to terminal
+    _log(message); // always print to terminal
 
     if (pushMethod === "openclaw") {
       try {
@@ -561,22 +578,22 @@ export async function handleWatch(f) {
   // Initial check
   const initial = await checkMatches({ device_id: id });
   if (initial.mutual_matches?.length) {
-    console.log(`🎉 You have ${initial.mutual_matches.length} mutual match(es)!`);
+    _log(`🎉 You have ${initial.mutual_matches.length} mutual match(es)!`);
     for (const m of initial.mutual_matches) {
       const key = `mutual:${m.device_id}`;
       notified.add(key);
-      console.log(`   ${m.emoji || "👤"} ${m.name}${m.their_contact ? " — contact: " + m.their_contact : ""}`);
+      _log(`   ${m.emoji || "👤"} ${m.name}${m.their_contact ? " — contact: " + m.their_contact : ""}`);
     }
-    console.log();
+    _log();
   }
   if (initial.incoming_accepts?.length) {
-    console.log(`📩 ${initial.incoming_accepts.length} person(s) want to meet you!`);
+    _log(`📩 ${initial.incoming_accepts.length} person(s) want to meet you!`);
     for (const m of initial.incoming_accepts) {
       const key = `incoming:${m.device_id}`;
       notified.add(key);
-      console.log(`   ${m.emoji || "👤"} ${m.name} — ${m.line1 || ""}`);
+      _log(`   ${m.emoji || "👤"} ${m.name} — ${m.line1 || ""}`);
     }
-    console.log();
+    _log();
   }
 
   // Subscribe to realtime changes on matches table
@@ -632,9 +649,9 @@ export async function handleWatch(f) {
     )
     .subscribe((status) => {
       if (status === "SUBSCRIBED") {
-        console.log("✅ Connected — listening for matches in real-time.");
+        _log("✅ Connected — listening for matches in real-time.");
       } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-        console.log(`⚠️  Connection issue (${status}), retrying...`);
+        _log(`⚠️  Connection issue (${status}), retrying...`);
       }
     });
 
@@ -678,7 +695,7 @@ export async function handleWatch(f) {
     )
     .subscribe((status) => {
       if (status === "SUBSCRIBED") {
-        console.log("✅ Connected — listening for event notifications.");
+        _log("✅ Connected — listening for event notifications.");
       }
     });
 
