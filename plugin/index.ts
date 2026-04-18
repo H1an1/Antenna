@@ -124,24 +124,35 @@ function cronJobId(deviceA: string, deviceB: string): string {
 }
 
 /** Send a real-time notification to a user via openclaw message send */
-function notifyUser(
+async function notifyUser(
   channel: string,
   userId: string,
   message: string,
   logger: any,
-): void {
+): Promise<void> {
   const deviceId = `${channel}:${userId}`;
-  const chatId = _channelContext.get(deviceId);
+  let chatId = _channelContext.get(deviceId);
+
+  // Fallback: read from DB if not in memory
+  if (!chatId) {
+    try {
+      const cfg = getConfig(api);
+      const sb = getSupabase(cfg);
+      const { data } = await sb.rpc("get_profile", { p_device_id: deviceId });
+      if (data?.last_chat_id) {
+        chatId = data.last_chat_id;
+        _channelContext.set(deviceId, chatId);
+      }
+    } catch {}
+  }
 
   try {
     if (chatId) {
-      // Use message send with known chat context
       execSync(
         `openclaw message send --channel ${channel} --target ${chatId} -m ${JSON.stringify(message)}`,
         { timeout: 30_000, encoding: "utf-8" },
       );
     } else {
-      // Fallback: try deliver
       execSync(
         `openclaw agent` +
         ` --message ${JSON.stringify(message)}` +
@@ -150,6 +161,12 @@ function notifyUser(
         ` --to ${channel}:${userId}`,
         { timeout: 30_000, encoding: "utf-8" },
       );
+    }
+    logger.info(`Antenna: notified ${channel}:${userId} (chat=${chatId || 'deliver'})`);
+  } catch (err: any) {
+    logger.warn(`Antenna: notify failed for ${channel}:${userId}: ${err.message}`);
+  }
+}
     }
     logger.info(`Antenna: notified ${channel}:${userId} (chat=${chatId || 'deliver'})`);
   } catch (err: any) {
@@ -1412,6 +1429,12 @@ export default function register(api: any) {
           const deviceId = `${ch}:${senderId}`;
           _channelContext.set(deviceId, chatId);
           _knownDeviceIds.add(deviceId);
+          // Persist to DB
+          try {
+            const cfg = getConfig(api);
+            const sb = getSupabase(cfg);
+            sb.rpc("upsert_profile", { p_device_id: deviceId, p_last_chat_id: chatId }).then(() => {}).catch(() => {});
+          } catch {}
         }
 
         // --- Auto-scan on location ---
