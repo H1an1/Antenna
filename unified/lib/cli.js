@@ -1,6 +1,6 @@
 // antenna CLI command handlers
 
-import { scan, getProfile, setProfile, accept, checkMatches, checkin, createBindToken, discover, createEvent, endEvent, eventCheckin, joinEvent, eventScan, pass as passUser, uploadEventImage, getClient } from "./core.js";
+import { scan, getProfile, setProfile, accept, checkMatches, checkin, createBindToken, discover, createEvent, endEvent, eventCheckin, joinEvent, eventScan, pass as passUser, uploadEventImage, updateEvent, approveParticipant, rejectParticipant, addCohost, getClient } from "./core.js";
 import { createInterface } from "readline";
 import { existsSync, mkdirSync, copyFileSync, readFileSync } from "fs";
 import { join, dirname, extname } from "path";
@@ -177,7 +177,7 @@ export async function handleEvent(f) {
     return;
   }
 
-  if (f.create || (!f.join && !f.scan && !f.end && f.name)) {
+  if (f.create || (!f.join && !f.scan && !f.end && !f.update && !f.approve && !f.reject && !f['add-host'] && f.name)) {
     if (!f.name) return console.error("Usage: antenna event --create --name 'AI Meetup' [--desc 'description'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2']");
     const result = await createEvent({ name: f.name, device_id: f.id || null, lat: f.lat ? +f.lat : undefined, lng: f.lng ? +f.lng : undefined, description: f.desc || undefined, og_image: f['og-image'] || undefined, requires_approval: f['requires-approval'] === true || f['requires-approval'] === 'true' || undefined, screening_questions: f['screening-questions'] ? f['screening-questions'].split('|') : undefined });
     console.log(`\n🎉 Event created!\n`);
@@ -192,9 +192,18 @@ export async function handleEvent(f) {
     if (!f.code || !f.id) return console.error("Usage: antenna event --join --code abc123 --id telegram:123");
     const result = await joinEvent({ code: f.code, device_id: f.id, lat: f.lat ? +f.lat : undefined, lng: f.lng ? +f.lng : undefined, application_context: f['application-context'] || undefined });
     if (result.joined) {
-      console.log(`\n✅ Joined "${result.name}" (${result.code})\n`);
+      if (result.status === 'pending') {
+        console.log(`\n🟡 申请已提交，等待主办方审批\n`);
+      } else {
+        console.log(`\n✅ Joined "${result.event}"\n`);
+        if (result.checked_in) console.log(`  自动签到 ✅\n`);
+      }
+    } else if (result.needs_screening) {
+      console.log(`\n📝 这个活动需要审批。请回答以下问题：`);
+      (result.screening_questions || []).forEach((q, i) => console.log(`  ${i + 1}. ${q}`));
+      console.log(`\n回答后用 --application-context '你的回答' 重新 join\n`);
     } else {
-      console.log(`\n❌ ${result.error}\n`);
+      console.log(`\n❌ ${result.error || result.message}\n`);
     }
     return;
   }
@@ -213,6 +222,50 @@ export async function handleEvent(f) {
       if (p.application_context) console.log(`    📝 ${p.application_context}`);
       console.log(`    ref: ${p.ref}\n`);
     });
+    return;
+  }
+
+  if (f.approve) {
+    if (!f.code || !f.id || !f.ref) return console.error("Usage: antenna event --approve --code abc123 --id telegram:123 --ref 1");
+    const result = await approveParticipant({ code: f.code, device_id: f.id, ref: f.ref });
+    if (result.approved) {
+      console.log("\n✅ Participant approved\n");
+    } else {
+      console.log(`\n❌ ${result.error}\n`);
+    }
+    return;
+  }
+
+  if (f.reject) {
+    if (!f.code || !f.id || !f.ref) return console.error("Usage: antenna event --reject --code abc123 --id telegram:123 --ref 1");
+    const result = await rejectParticipant({ code: f.code, device_id: f.id, ref: f.ref });
+    if (result.rejected) {
+      console.log("\n✅ Participant rejected\n");
+    } else {
+      console.log(`\n❌ ${result.error}\n`);
+    }
+    return;
+  }
+
+  if (f.update) {
+    if (!f.code || !f.id) return console.error("Usage: antenna event --update --code abc123 --id telegram:123 [--name 'New Name'] [--desc 'New desc']");
+    const result = await updateEvent({ code: f.code, device_id: f.id, name: f.name, description: f.desc, og_image: f['og-image'], lat: f.lat ? +f.lat : undefined, lng: f.lng ? +f.lng : undefined, starts_at: f['starts-at'], ends_at: f['ends-at'] });
+    if (result.updated) {
+      console.log("\n✅ Event updated\n");
+    } else {
+      console.log(`\n❌ ${result.error}\n`);
+    }
+    return;
+  }
+
+  if (f['add-host']) {
+    if (!f.code || !f.id || !f.ref) return console.error("Usage: antenna event --add-host --code abc123 --id telegram:123 --ref 1");
+    const result = await addCohost({ code: f.code, device_id: f.id, ref: f.ref });
+    if (result.added) {
+      console.log("\n✅ Co-host added\n");
+    } else {
+      console.log(`\n❌ ${result.error}\n`);
+    }
     return;
   }
 

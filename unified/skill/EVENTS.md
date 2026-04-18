@@ -82,11 +82,17 @@ Generate a GPS link for setting event location.
 ## Agent Behavior
 
 ### When someone says "create an event"
-1. Ask for event name (required) and description (optional)
-2. **Ask if participants need approval** ("Do you want to review and approve participants before they join?"). If yes, ask what screening questions to include.
-3. Call `antenna_event_create` with `requires_approval` and `screening_questions` if applicable
-4. If no GPS provided, call `antenna_bind(purpose="event", event_code=CODE)` and send the link
-5. Share the event URL with the user
+Collect the following info through conversation (ask one by one, don't dump all at once):
+1. **Event name** (required) — "活动叫什么名字？"
+2. **Description** — "简单描述一下这个活动？"
+3. **Time** — "什么时候开始？大概多长？" (convert to starts_at / ends_at ISO strings)
+4. **Location** — "活动在哪里？" If user gives an address, geocode it. If vague, generate a bind link after creation.
+5. **Approval** — "需要审批参与者吗？" If yes:
+6. **Screening questions** — "你想问报名者什么问题？" Collect as a list.
+
+Then call `antenna_event_create` with all collected info.
+If no GPS, call `antenna_bind(purpose="event", event_code=CODE)` and send the link.
+Share the event URL with the user.
 
 ### When someone shares an event link
 1. Extract the code from `antenna.fyi/events/CODE`
