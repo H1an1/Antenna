@@ -207,8 +207,10 @@ export async function handleEvent(f) {
     result.profiles.forEach((p) => {
       const badge = p.checked_in ? " ✅" : "";
       const creatorTag = p.role === "creator" ? " [主办]" : "";
-      console.log(`  ${p.emoji} ${p.name}${creatorTag}${badge}`);
+      const statusTag = p.status === "pending" ? " 🟡待审批" : "";
+      console.log(`  ${p.emoji} ${p.name}${creatorTag}${badge}${statusTag}`);
       if (p.line1) console.log(`    ${p.line1}`);
+      if (p.application_context) console.log(`    📝 ${p.application_context}`);
       console.log(`    ref: ${p.ref}\n`);
     });
     return;
