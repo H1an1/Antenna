@@ -155,7 +155,32 @@ def register(ctx):
             except Exception:
                 pass
 
-        # 1. Check location_events table (web GPS updates)
+        # 0b. Check event approval status (every 60s)
+        if now - _last_match_check > _MATCH_CHECK_INTERVAL and _my_device_ids:
+            try:
+                sb = _sb()
+                for did in list(_my_device_ids):
+                    resp = sb.rpc("get_my_event_updates", {"p_device_id": did}).execute()
+                    events = resp.data or []
+                    for ev in events:
+                        key = f"event:{ev.get('event_id')}:{ev.get('status')}"
+                        if key in _notified_match_keys:
+                            continue
+                        _notified_match_keys.add(key)
+                        status = ev.get("status")
+                        role = ev.get("role")
+                        name = ev.get("event_name", "活动")
+                        if status == "active" and role not in ("creator", "cohost"):
+                            hints.append(
+                                f"[Antenna] ✅ 你的申请已通过！欢迎加入「{name}」"
+                                f"请立即通知用户这个好消息！"
+                            )
+                        elif status == "rejected":
+                            hints.append(
+                                f"[Antenna] ❌ 你的申请未通过「{name}」"
+                            )
+            except Exception:
+                pass
         now = time.time()
         if now - _last_event_check > _EVENT_CHECK_INTERVAL:
             _last_event_check = now

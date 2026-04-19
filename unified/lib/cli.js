@@ -343,8 +343,10 @@ export async function handleStatus(f) {
   const pidFile = path.join(os.homedir(), '.antenna', 'watch.pid');
   try {
     if (existsSync(pidFile)) {
-      const pid = parseInt(readFileSync(pidFile, 'utf8').trim());
-      try { process.kill(pid, 0); console.log(`  Watch: ✅ running (PID ${pid})`); }
+      const content = readFileSync(pidFile, 'utf8').trim();
+      const [pidStr, watchId] = content.split(':');
+      const pid = parseInt(pidStr);
+      try { process.kill(pid, 0); console.log(`  Watch: ✅ running (PID ${pid}${watchId ? ', id=' + watchId : ''})`); }
       catch { console.log('  Watch: ❌ stale PID file (process dead)'); }
     } else {
       console.log('  Watch: ❌ not running');
@@ -484,10 +486,12 @@ export async function handleWatch(f) {
   const pidDir = path.join(os.homedir(), '.antenna');
   const pidFile = path.join(pidDir, 'watch.pid');
 
-  // Check for existing watch process
+  // Check for existing watch process (store PID:deviceId for cross-version dedup)
   if (existsSync(pidFile)) {
     try {
-      const existingPid = parseInt(readFileSync(pidFile, 'utf8').trim());
+      const content = readFileSync(pidFile, 'utf8').trim();
+      const [pidStr] = content.split(':');
+      const existingPid = parseInt(pidStr);
       process.kill(existingPid, 0); // throws if not running
       console.error(`❌ Watch already running (PID ${existingPid}). Kill it first or remove ${pidFile}`);
       process.exit(1);
@@ -499,7 +503,7 @@ export async function handleWatch(f) {
 
   try {
     if (!existsSync(pidDir)) mkdirSync(pidDir, { recursive: true });
-    writeFileSync(pidFile, String(process.pid));
+    writeFileSync(pidFile, `${process.pid}:${id}`);
   } catch {}
   process.on('exit', () => { try { unlinkSync(pidFile); } catch {} });
   process.on('SIGINT', () => { try { unlinkSync(pidFile); } catch {} process.exit(0); });
