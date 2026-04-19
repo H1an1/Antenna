@@ -2,7 +2,7 @@
 
 import { scan, getProfile, setProfile, accept, checkMatches, checkin, createBindToken, discover, createEvent, endEvent, eventCheckin, joinEvent, eventScan, pass as passUser, uploadEventImage, updateEvent, approveParticipant, rejectParticipant, addCohost, getClient } from "./core.js";
 import { createInterface } from "readline";
-import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync, unlinkSync } from "fs";
+import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync, unlinkSync, renameSync } from "fs";
 import path from "path";
 import os from "os";
 import { join, dirname, extname } from "path";
@@ -125,7 +125,7 @@ export async function handleMatches(f) {
   for (const m of result.incoming_accepts) {
     console.log(`📩 WANTS TO MEET YOU: ${m.emoji} ${m.name}`);
     if (m.line1) console.log(`   ${m.line1}`);
-    console.log(`   Accept: antenna accept --id ${f.id} --target ${m.device_id}`);
+    console.log(`   Accept: antenna accept --id ${f.id} --ref ${m.ref}`);
     console.log();
   }
 }
@@ -483,6 +483,20 @@ export async function handleWatch(f) {
   // Write PID file for health check
   const pidDir = path.join(os.homedir(), '.antenna');
   const pidFile = path.join(pidDir, 'watch.pid');
+
+  // Check for existing watch process
+  if (existsSync(pidFile)) {
+    try {
+      const existingPid = parseInt(readFileSync(pidFile, 'utf8').trim());
+      process.kill(existingPid, 0); // throws if not running
+      console.error(`❌ Watch already running (PID ${existingPid}). Kill it first or remove ${pidFile}`);
+      process.exit(1);
+    } catch (e) {
+      if (e.code !== 'ESRCH') { /* process exists */ throw e; }
+      // Process not running, stale PID file — continue
+    }
+  }
+
   try {
     if (!existsSync(pidDir)) mkdirSync(pidDir, { recursive: true });
     writeFileSync(pidFile, String(process.pid));
@@ -492,27 +506,56 @@ export async function handleWatch(f) {
   process.on('SIGTERM', () => { try { unlinkSync(pidFile); } catch {} process.exit(0); });
 
   const sb = getClient();
-  const notified = new Set();
+
+  // Persist notified set to disk
+  const notifiedFile = path.join(pidDir, 'notified.json');
+
+  function loadNotified() {
+    try {
+      const data = JSON.parse(readFileSync(notifiedFile, 'utf8'));
+      const now = Date.now();
+      const TTL = 48 * 60 * 60 * 1000;
+      const set = new Set();
+      for (const [key, ts] of Object.entries(data)) {
+        if (now - ts < TTL) set.add(key);
+      }
+      return set;
+    } catch { return new Set(); }
+  }
+
+  function saveNotified(set) {
+    const now = Date.now();
+    const obj = {};
+    for (const key of set) obj[key] = now;
+    const tmp = notifiedFile + '.tmp';
+    writeFileSync(tmp, JSON.stringify(obj));
+    renameSync(tmp, notifiedFile);
+  }
+
+  const notified = loadNotified();
 
   // Detect local agent framework for push notifications
-  let pushMethod = "terminal"; // default: just print
-  try {
-    execSync("which openclaw", { stdio: "pipe" });
-    // Verify gateway is running
+  let pushMethod = f.push || null;
+  if (!pushMethod) {
+    pushMethod = "terminal"; // default: just print
     try {
-      execSync("openclaw gateway health", { stdio: "pipe", timeout: 5000 });
-      pushMethod = "openclaw";
-    } catch { /* gateway not running */ }
-  } catch { /* openclaw not installed */ }
-
-  if (pushMethod === "terminal") {
-    try {
-      execSync("which hermes", { stdio: "pipe" });
+      execSync("which openclaw", { stdio: "pipe" });
+      // Verify gateway is running
       try {
-        execSync("hermes gateway status", { stdio: "pipe", timeout: 5000 });
-        pushMethod = "hermes";
-      } catch { /* hermes gateway not running */ }
-    } catch { /* hermes not installed */ }
+        execSync("openclaw gateway health", { stdio: "pipe", timeout: 5000 });
+        pushMethod = "openclaw";
+      } catch { /* gateway not running */ }
+    } catch { /* openclaw not installed */ }
+
+    if (pushMethod === "terminal") {
+      try {
+        execSync("which hermes", { stdio: "pipe" });
+        try {
+          execSync("hermes gateway status", { stdio: "pipe", timeout: 5000 });
+          pushMethod = "hermes";
+        } catch { /* hermes gateway not running */ }
+      } catch { /* hermes not installed */ }
+    }
   }
 
   // Force stdout blocking mode for non-TTY environments (Hermes exec)
@@ -580,19 +623,21 @@ export async function handleWatch(f) {
   if (initial.mutual_matches?.length) {
     _log(`🎉 You have ${initial.mutual_matches.length} mutual match(es)!`);
     for (const m of initial.mutual_matches) {
-      const key = `mutual:${m.device_id}`;
+      const key = `mutual:${m._device_id}`;
       notified.add(key);
       _log(`   ${m.emoji || "👤"} ${m.name}${m.their_contact ? " — contact: " + m.their_contact : ""}`);
     }
+    saveNotified(notified);
     _log();
   }
   if (initial.incoming_accepts?.length) {
     _log(`📩 ${initial.incoming_accepts.length} person(s) want to meet you!`);
     for (const m of initial.incoming_accepts) {
-      const key = `incoming:${m.device_id}`;
+      const key = `incoming:${m._device_id}`;
       notified.add(key);
       _log(`   ${m.emoji || "👤"} ${m.name} — ${m.line1 || ""}`);
     }
+    saveNotified(notified);
     _log();
   }
 
@@ -618,26 +663,30 @@ export async function handleWatch(f) {
 
             // Check if mutual
             const matches = await checkMatches({ device_id: id });
-            const isMutual = matches.mutual_matches?.some(m => m.device_id === row.device_id_a);
+            const isMutual = matches.mutual_matches?.some(m => m._device_id === row.device_id_a);
 
             if (isMutual) {
               const mutualKey = `mutual:${row.device_id_a}`;
               notified.add(mutualKey);
+              saveNotified(notified);
               const contact = row.contact_info_a;
               pushNotify(`🎉 MUTUAL MATCH! ${emoji} ${name} also accepted you!${contact ? " Contact: " + contact : ""}`);
             } else {
-              pushNotify(`📩 ${emoji} ${name} wants to meet you! Run: antenna accept --id ${id} --target ${row.device_id_a}`);
+              notified.add(key);
+              saveNotified(notified);
+              pushNotify(`📩 ${emoji} ${name} wants to meet you! Use 'antenna matches --id ${id}' to respond.`);
             }
           }
 
           // I accepted someone and they also accepted me
           if (row.device_id_a === id) {
             const matches = await checkMatches({ device_id: id });
-            const mutual = matches.mutual_matches?.find(m => m.device_id === row.device_id_b);
+            const mutual = matches.mutual_matches?.find(m => m._device_id === row.device_id_b);
             if (mutual) {
               const mutualKey = `mutual:${row.device_id_b}`;
               if (!notified.has(mutualKey)) {
                 notified.add(mutualKey);
+                saveNotified(notified);
                 pushNotify(`🎉 MUTUAL MATCH! ${mutual.emoji || "👤"} ${mutual.name}!${mutual.their_contact ? " Contact: " + mutual.their_contact : ""}`);
               }
             }
@@ -649,11 +698,27 @@ export async function handleWatch(f) {
     )
     .subscribe((status) => {
       if (status === "SUBSCRIBED") {
+        retryCount = 0;
         _log("✅ Connected — listening for matches in real-time.");
       } else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") {
-        _log(`⚠️  Connection issue (${status}), retrying...`);
+        retryCount++;
+        if (retryCount < MAX_FAST_RETRIES) {
+          const delay = Math.min(1000 * Math.pow(2, retryCount), 60000);
+          _log(`⚠️  Connection issue (${status}), retry #${retryCount} in ${Math.round(delay/1000)}s...`);
+          setTimeout(() => { try { channel.subscribe(); } catch {} }, delay);
+        } else if (retryCount === MAX_FAST_RETRIES) {
+          _log(`⚠️  Connection unstable after ${MAX_FAST_RETRIES} retries. Switching to ${COOLDOWN_MS/1000}s cooldown. Polling fallback still active.`);
+          setTimeout(() => { try { channel.subscribe(); } catch {} }, COOLDOWN_MS);
+        } else {
+          setTimeout(() => { try { channel.subscribe(); } catch {} }, COOLDOWN_MS);
+        }
       }
     });
+
+  // Reconnection state for matches channel
+  let retryCount = 0;
+  const MAX_FAST_RETRIES = 20;
+  const COOLDOWN_MS = 5 * 60 * 1000; // 5 min
 
   // Subscribe to event_participants changes (approval notifications)
   sb
@@ -704,16 +769,18 @@ export async function handleWatch(f) {
     try {
       const result = await checkMatches({ device_id: id });
       for (const m of (result.mutual_matches || [])) {
-        const key = `mutual:${m.device_id}`;
+        const key = `mutual:${m._device_id}`;
         if (!notified.has(key)) {
           notified.add(key);
+          saveNotified(notified);
           pushNotify(`🎉 MUTUAL MATCH! ${m.emoji || "👤"} ${m.name}!${m.their_contact ? " Contact: " + m.their_contact : ""}`);
         }
       }
       for (const m of (result.incoming_accepts || [])) {
-        const key = `incoming:${m.device_id}`;
+        const key = `incoming:${m._device_id}`;
         if (!notified.has(key)) {
           notified.add(key);
+          saveNotified(notified);
           pushNotify(`📩 ${m.emoji || "👤"} ${m.name} wants to meet you!`);
         }
       }
@@ -741,7 +808,7 @@ Usage:
   antenna matches    --id telegram:123
   antenna discover   --id telegram:123
   antenna event      --create --name 'AI Meetup' [--desc '...'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2'] | --join --code abc123 | --scan --code abc123 | --end --code abc123 --id telegram:123 | --upload-image --code abc123 --file /path/to/image.png | --update --code abc123 --name 'New Name' | --approve --code abc123 --ref 1 | --reject --code abc123 --ref 1 | --add-host --code abc123 --ref 1
-  antenna watch       --id telegram:123  Watch for new matches in real-time (Ctrl+C to stop)
+  antenna watch       --id telegram:123 [--push hermes|openclaw|terminal]  Watch for new matches in real-time (Ctrl+C to stop)
   antenna bind       --id telegram:123
   antenna serve      Start MCP server (stdio transport)
   antenna setup      Interactive profile setup [--id telegram:123]

@@ -79,19 +79,11 @@ export async function scan({ lat, lng, radius_m = 500, device_id, supabaseUrl, s
       lat = loc.lat;
       lng = loc.lng;
     } else {
-      return { count: 0, radius_m, profiles: [], message: "还没有位置信息。请先通过链接分享位置，或者发送位置消息。" };
+      return { count: 0, radius_m, profiles: [], message: "还没有位置信息。请先用 'antenna checkin' 分享位置，或通过链接分享位置。" };
     }
   }
 
   const fuzzy = fuzzyCoord(lat, lng);
-
-  if (device_id) {
-    await sb.rpc("upsert_profile_location", {
-      p_device_id: device_id,
-      p_lng: fuzzy.lng,
-      p_lat: fuzzy.lat,
-    });
-  }
 
   const { data, error } = await sb.rpc("nearby_profiles", {
     p_lat: fuzzy.lat,
@@ -323,60 +315,43 @@ export async function checkin({ lat, lng, device_id, supabaseUrl, supabaseKey })
 export async function checkMatches({ device_id, supabaseUrl, supabaseKey }) {
   const sb = getClient(supabaseUrl, supabaseKey);
 
-  const { data: allMatches, error } = await sb.rpc("get_my_matches", { p_device_id: device_id });
+  // Single RPC with JOINed profiles — no N+1
+  const { data, error } = await sb.rpc("get_my_matches_with_profiles", { p_device_id: device_id });
   if (error) throw new Error(error.message);
 
-  if (!allMatches?.length) {
-    return {
-      mutual_matches: [],
-      incoming_accepts: [],
-      message: "目前没有进行中的匹配。",
-    };
-  }
+  const raw = data || { mutual_matches: [], incoming_accepts: [] };
 
-  const myMatches = allMatches.filter((m) => m.device_id_a === device_id);
-  const incomingMatches = allMatches.filter((m) => m.device_id_b === device_id);
+  // Add refs and rename target_id to _device_id (internal only)
+  const mutualMatches = (raw.mutual_matches || []).map((m, i) => ({
+    ref: String(i + 1),
+    _device_id: m.target_id,
+    name: m.name || "匿名",
+    emoji: m.emoji || "👤",
+    line1: m.line1,
+    line2: m.line2,
+    line3: m.line3,
+    their_contact: m.their_contact || null,
+    you_shared: m.you_shared || null,
+  }));
 
-  // Mutual
-  const mutualMatches = [];
-  for (const match of myMatches) {
-    const reverse = incomingMatches.find((m) => m.device_id_a === match.device_id_b);
-    if (reverse) {
-      const profile = await getProfile({ device_id: match.device_id_b, supabaseUrl, supabaseKey });
-      mutualMatches.push({
-        device_id: match.device_id_b,
-        name: profile?.display_name || "匿名",
-        emoji: profile?.emoji || "👤",
-        line1: profile?.line1,
-        line2: profile?.line2,
-        line3: profile?.line3,
-        their_contact: reverse.contact_info_a || null,
-        you_shared: match.contact_info_a || null,
-      });
-    }
-  }
-
-  // Incoming only
-  const incomingAccepts = [];
-  for (const match of incomingMatches) {
-    const iAccepted = myMatches.find((m) => m.device_id_b === match.device_id_a);
-    if (!iAccepted) {
-      const profile = await getProfile({ device_id: match.device_id_a, supabaseUrl, supabaseKey });
-      incomingAccepts.push({
-        device_id: match.device_id_a,
-        name: profile?.display_name || "匿名",
-        emoji: profile?.emoji || "👤",
-        line1: profile?.line1,
-        line2: profile?.line2,
-        line3: profile?.line3,
-      });
-    }
-  }
+  const incomingAccepts = (raw.incoming_accepts || []).map((m, i) => ({
+    ref: String(i + 1),
+    _device_id: m.target_id,
+    name: m.name || "匿名",
+    emoji: m.emoji || "👤",
+    line1: m.line1,
+    line2: m.line2,
+    line3: m.line3,
+  }));
 
   const messages = [];
   if (mutualMatches.length > 0) messages.push(`${mutualMatches.length} 个双向匹配！可以交换联系方式了`);
   if (incomingAccepts.length > 0) messages.push(`${incomingAccepts.length} 个人想认识你，等你回应`);
-  if (messages.length === 0) messages.push("你接受了一些匹配，但对方还没有回应。耐心等等 ⏳");
+  if (messages.length === 0 && mutualMatches.length === 0 && incomingAccepts.length === 0) {
+    messages.push("目前没有进行中的匹配。");
+  } else if (messages.length === 0) {
+    messages.push("你接受了一些匹配，但对方还没有回应。耐心等等 ⏳");
+  }
 
   return {
     mutual_matches: mutualMatches,
