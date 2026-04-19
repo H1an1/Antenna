@@ -542,7 +542,9 @@ export async function handleWatch(f) {
   // Push to ALL available frameworks, not just one
   const pushMethods = new Set();
   if (f.push) {
-    f.push.split(",").forEach(m => pushMethods.add(m.trim()));
+    // Support both --push hermes,openclaw and --push hermes --push openclaw
+    const raw = Array.isArray(f.push) ? f.push : [f.push];
+    raw.forEach(v => v.split(",").forEach(m => pushMethods.add(m.trim())));
   } else {
     try {
       execSync("which openclaw", { stdio: "pipe" });
