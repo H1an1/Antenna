@@ -1,10 +1,17 @@
 """Antenna — Hermes Agent Plugin
 
-Nearby people discovery. Registers 6 tools and a pre_llm_call hook
-that auto-detects location data (from messages + web GPS events).
+Nearby people discovery. Registers tools, a pre_llm_call hook,
+and a background Realtime listener for push notifications.
 
 Drop this directory into ~/.hermes/plugins/antenna/
 """
+
+import json
+import os
+import re
+import threading
+import time
+from pathlib import Path
 
 from .tools import (
     handle_scan,
@@ -90,6 +97,18 @@ def register(ctx):
         hints = []
 
         now = time.time()
+
+        # -1. Read pending notifications from Realtime listener
+        _nf = Path.home() / ".antenna" / "pending_notifications.json"
+        try:
+            if _nf.exists():
+                pending = json.loads(_nf.read_text())
+                if pending:
+                    for n in pending:
+                        hints.append(f"[Antenna] {n['message']}")
+                    _nf.write_text("[]")
+        except Exception:
+            pass
 
         # 0. Check for new matches (every 60s)
         if now - _last_match_check > _MATCH_CHECK_INTERVAL and _my_device_ids:
@@ -184,5 +203,119 @@ def register(ctx):
         return None
 
     ctx.register_hook("pre_llm_call", on_pre_llm)
+
+    # ── Background Realtime listener for push notifications ──────
+    _notif_dir = Path.home() / ".antenna"
+    _notif_file = _notif_dir / "pending_notifications.json"
+
+    def _append_notification(msg: str):
+        """Thread-safe append to pending notifications file."""
+        try:
+            _notif_dir.mkdir(parents=True, exist_ok=True)
+            notifications = []
+            if _notif_file.exists():
+                try:
+                    notifications = json.loads(_notif_file.read_text())
+                except Exception:
+                    notifications = []
+            notifications.append({"message": msg, "timestamp": time.time()})
+            # Keep max 50
+            notifications = notifications[-50:]
+            _notif_file.write_text(json.dumps(notifications, ensure_ascii=False))
+        except Exception:
+            pass
+
+    def _realtime_listener():
+        """Background thread: listen to Supabase Realtime for matches + event participants."""
+        try:
+            sb = _sb()
+            # Listen to matches INSERT
+            sb.channel("hermes-antenna-matches").on(
+                "postgres_changes",
+                {"event": "INSERT", "schema": "public", "table": "matches"},
+                lambda payload: _handle_match_change(payload),
+            ).subscribe()
+
+            # Listen to event_participants INSERT + UPDATE
+            sb.channel("hermes-antenna-events").on(
+                "postgres_changes",
+                {"event": "*", "schema": "public", "table": "event_participants"},
+                lambda payload: _handle_event_change(payload),
+            ).subscribe()
+
+            # Keep thread alive
+            while True:
+                time.sleep(60)
+        except Exception as e:
+            print(f"[Antenna] Realtime listener failed: {e}")
+
+    def _handle_match_change(payload):
+        try:
+            row = payload.get("new") or payload.get("record", {})
+            target = row.get("device_id_b")
+            if not target or target not in _my_device_ids:
+                return
+            key = f"{row.get('device_id_a')}→{target}"
+            if key in _notified_match_keys:
+                return
+            _notified_match_keys.add(key)
+            sb = _sb()
+            prof = sb.rpc("get_profile", {"p_device_id": row.get("device_id_a")}).execute()
+            p = prof.data or {}
+            name = p.get("display_name") or "有人"
+            emoji = p.get("emoji") or "👤"
+            _append_notification(f"📩 {emoji} {name} 想认识你！用 antenna_check_matches 查看详情。")
+        except Exception:
+            pass
+
+    def _handle_event_change(payload):
+        try:
+            event_type = payload.get("type") or payload.get("eventType", "")
+            row = payload.get("new") or payload.get("record", {})
+            old = payload.get("old") or payload.get("old_record", {})
+
+            if event_type == "INSERT" and row.get("status") == "pending":
+                # Someone applied — notify creator
+                event_id = row.get("event_id")
+                applicant_id = row.get("device_id")
+                if not event_id:
+                    return
+                sb = _sb()
+                evt = sb.rpc("get_event_by_id", {"p_event_id": event_id}).execute()
+                event = evt.data or {}
+                if not event.get("found") or event.get("created_by") not in _my_device_ids:
+                    return
+                prof = sb.rpc("get_profile", {"p_device_id": applicant_id}).execute()
+                p = prof.data or {}
+                name = p.get("display_name") or "某人"
+                emoji = p.get("emoji") or "👤"
+                _append_notification(f"📩 {emoji} {name} 申请加入你的活动「{event.get('name')}」！用 antenna_event_scan 查看并审批。")
+
+            elif event_type == "UPDATE":
+                device_id = row.get("device_id")
+                if device_id not in _my_device_ids:
+                    return
+                old_status = old.get("status")
+                new_status = row.get("status")
+                if old_status == "pending" and new_status == "active":
+                    sb = _sb()
+                    evt = sb.rpc("get_event_by_id", {"p_event_id": row.get("event_id")}).execute()
+                    event = evt.data or {}
+                    _append_notification(f"✅ 你的申请已通过！欢迎加入「{event.get('name', '活动')}」")
+                elif old_status == "pending" and new_status == "rejected":
+                    sb = _sb()
+                    evt = sb.rpc("get_event_by_id", {"p_event_id": row.get("event_id")}).execute()
+                    event = evt.data or {}
+                    _append_notification(f"❌ 你的申请未通过「{event.get('name', '活动')}」")
+        except Exception:
+            pass
+
+    # Start background listener thread
+    try:
+        t = threading.Thread(target=_realtime_listener, daemon=True, name="antenna-realtime")
+        t.start()
+        print("[Antenna] Realtime listener started 📡")
+    except Exception as e:
+        print(f"[Antenna] Failed to start Realtime listener: {e}")
 
     print("[Antenna] Plugin loaded 📡")
