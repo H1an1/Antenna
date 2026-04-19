@@ -762,6 +762,7 @@ export async function handleWatch(f) {
     });
 
   // Keep alive — also poll every 2 minutes as fallback
+  // (Realtime may not work without SELECT policies)
   const pollInterval = setInterval(async () => {
     try {
       const result = await checkMatches({ device_id: id });
@@ -779,6 +780,23 @@ export async function handleWatch(f) {
           notified.add(key);
           saveNotified(notified);
           pushNotify(`📩 ${m.emoji || "👤"} ${m.name} wants to meet you!`);
+        }
+      }
+    } catch { /* silent */ }
+
+    // Poll event status changes (approval/rejection)
+    try {
+      const { data: events } = await sb.rpc("get_my_event_updates", { p_device_id: id });
+      for (const ev of (events || [])) {
+        const key = `event:${ev.event_id}:${ev.status}`;
+        if (!notified.has(key)) {
+          notified.add(key);
+          saveNotified(notified);
+          if (ev.status === "active" && ev.role !== "creator" && ev.role !== "cohost") {
+            pushNotify(`✅ Your application to "${ev.event_name}" was approved! You're in.`);
+          } else if (ev.status === "rejected") {
+            pushNotify(`❌ Your application to "${ev.event_name}" was not approved.`);
+          }
         }
       }
     } catch { /* silent */ }
