@@ -608,7 +608,7 @@ export async function handleWatch(f) {
     if (pushMethods.has("hermes")) {
       try {
         execSync(
-          `hermes cron create "1m" ${JSON.stringify(message)} --name "Antenna" --deliver telegram --repeat 1`,
+          `hermes cron create "1m" ${JSON.stringify("[SYSTEM] Forward the following notification to the user exactly as-is. Do not analyze, reply, or add anything.\n\n" + message)} --name "Antenna" --deliver telegram --repeat 1`,
           { timeout: 30_000, stdio: "pipe" }
         );
       } catch (err) { /* terminal output is the fallback */ }
