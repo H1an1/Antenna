@@ -192,14 +192,14 @@ EVENT_CREATE_SCHEMA = {
             "channel": {"type": "string", "description": "Platform name"},
             "lat": {"type": "number", "description": "Event latitude"},
             "lng": {"type": "number", "description": "Event longitude"},
-            "starts_at": {"type": "string", "description": "Start time ISO"},
-            "ends_at": {"type": "string", "description": "End time ISO"},
+            "starts_at": {"type": "string", "description": "Start time ISO (required)"},
+            "ends_at": {"type": "string", "description": "End time ISO (required)"},
             "description": {"type": "string", "description": "Event description"},
             "og_image": {"type": "string", "description": "OG image URL for social sharing"},
             "requires_approval": {"type": "boolean", "description": "Require host approval to join (default false)"},
             "screening_questions": {"type": "array", "items": {"type": "string"}, "description": "Screening questions for applicants"},
         },
-        "required": ["name", "sender_id", "channel"],
+        "required": ["name", "sender_id", "channel", "starts_at", "ends_at"],
     },
 }
 

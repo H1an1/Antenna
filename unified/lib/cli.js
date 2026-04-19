@@ -180,8 +180,9 @@ export async function handleEvent(f) {
   }
 
   if (f.create || (!f.join && !f.scan && !f.end && !f.update && !f.approve && !f.reject && !f['add-host'] && f.name)) {
-    if (!f.name) return console.error("Usage: antenna event --create --name 'AI Meetup' [--desc 'description'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2']");
-    const result = await createEvent({ name: f.name, device_id: f.id || null, lat: f.lat ? +f.lat : undefined, lng: f.lng ? +f.lng : undefined, description: f.desc || undefined, og_image: f['og-image'] || undefined, requires_approval: f['requires-approval'] === true || f['requires-approval'] === 'true' || undefined, screening_questions: f['screening-questions'] ? f['screening-questions'].split('|') : undefined });
+    if (!f.name) return console.error("Usage: antenna event --create --name 'AI Meetup' --starts-at '2026-04-19T14:00' --ends-at '2026-04-19T18:00' [--lat 34.05 --lng -118.25] [--desc 'description'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2']");
+    if (!f['starts-at'] || !f['ends-at']) return console.error("❌ --starts-at and --ends-at are required. Example: --starts-at '2026-04-19T14:00' --ends-at '2026-04-19T18:00'");
+    const result = await createEvent({ name: f.name, device_id: f.id || null, lat: f.lat ? +f.lat : undefined, lng: f.lng ? +f.lng : undefined, starts_at: f['starts-at'], ends_at: f['ends-at'], description: f.desc || undefined, og_image: f['og-image'] || undefined, requires_approval: f['requires-approval'] === true || f['requires-approval'] === 'true' || undefined, screening_questions: f['screening-questions'] ? f['screening-questions'].split('|') : undefined });
     console.log(`\n🎉 Event created!\n`);
     console.log(`  Name: ${result.name}`);
     console.log(`  Code: ${result.code}`);
@@ -272,7 +273,7 @@ export async function handleEvent(f) {
   }
 
   console.log(`Usage:
-  antenna event --create --name 'AI Meetup' [--id telegram:123] [--desc 'description'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2']
+  antenna event --create --name 'AI Meetup' --starts-at '...' --ends-at '...' [--id telegram:123] [--lat 34.05 --lng -118.25] [--desc 'description'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2']
   antenna event --join --code abc123 --id telegram:123
   antenna event --scan --code abc123 [--id telegram:123]
   antenna event --checkin --code abc123 --id telegram:123 [--lat 34.05 --lng -118.24]
@@ -837,7 +838,7 @@ Usage:
   antenna pass       --id telegram:123 --target telegram:789 (or --ref 1)
   antenna matches    --id telegram:123
   antenna discover   --id telegram:123
-  antenna event      --create --name 'AI Meetup' [--desc '...'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2'] | --join --code abc123 | --scan --code abc123 | --end --code abc123 --id telegram:123 | --upload-image --code abc123 --file /path/to/image.png | --update --code abc123 --name 'New Name' | --approve --code abc123 --ref 1 | --reject --code abc123 --ref 1 | --add-host --code abc123 --ref 1
+  antenna event      --create --name 'AI Meetup' --starts-at '...' --ends-at '...' [--lat 34.05 --lng -118.25] [--desc '...'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2'] | --join --code abc123 | --scan --code abc123 | --end --code abc123 --id telegram:123 | --upload-image --code abc123 --file /path/to/image.png | --update --code abc123 --name 'New Name' | --approve --code abc123 --ref 1 | --reject --code abc123 --ref 1 | --add-host --code abc123 --ref 1
   antenna watch       --id telegram:123 [--push hermes|openclaw|terminal]  Watch for new matches in real-time (Ctrl+C to stop)
   antenna bind       --id telegram:123
   antenna serve      Start MCP server (stdio transport)
