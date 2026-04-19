@@ -534,28 +534,26 @@ export async function handleWatch(f) {
 
   const notified = loadNotified();
 
-  // Detect local agent framework for push notifications
-  let pushMethod = f.push || null;
-  if (!pushMethod) {
-    pushMethod = "terminal"; // default: just print
+  // Detect local agent frameworks for push notifications
+  // Push to ALL available frameworks, not just one
+  const pushMethods = new Set();
+  if (f.push) {
+    f.push.split(",").forEach(m => pushMethods.add(m.trim()));
+  } else {
     try {
       execSync("which openclaw", { stdio: "pipe" });
-      // Verify gateway is running
       try {
         execSync("openclaw gateway health", { stdio: "pipe", timeout: 5000 });
-        pushMethod = "openclaw";
+        pushMethods.add("openclaw");
       } catch { /* gateway not running */ }
     } catch { /* openclaw not installed */ }
-
-    if (pushMethod === "terminal") {
+    try {
+      execSync("which hermes", { stdio: "pipe" });
       try {
-        execSync("which hermes", { stdio: "pipe" });
-        try {
-          execSync("hermes gateway status", { stdio: "pipe", timeout: 5000 });
-          pushMethod = "hermes";
-        } catch { /* hermes gateway not running */ }
-      } catch { /* hermes not installed */ }
-    }
+        execSync("hermes gateway status", { stdio: "pipe", timeout: 5000 });
+        pushMethods.add("hermes");
+      } catch { /* hermes gateway not running */ }
+    } catch { /* hermes not installed */ }
   }
 
   // Force stdout blocking mode for non-TTY environments (Hermes exec)
@@ -573,10 +571,8 @@ export async function handleWatch(f) {
   };
 
   _log(`📡 Watching for new matches for ${id}...`);
-  if (pushMethod === "openclaw") {
-    _log(`   🔗 Detected OpenClaw — will push notifications to your channel.`);
-  } else if (pushMethod === "hermes") {
-    _log(`   🔗 Detected Hermes — will push notifications to your channel.`);
+  if (pushMethods.size > 0) {
+    _log(`   🔗 Push targets: ${[...pushMethods].join(", ")}`);
   } else {
     _log(`   ℹ️  No agent framework detected — notifications will print here.`);
   }
@@ -589,9 +585,9 @@ export async function handleWatch(f) {
   async function pushNotify(message) {
     _log(message); // always print to terminal
 
-    if (pushMethod === "openclaw") {
+    // Push to ALL available frameworks
+    if (pushMethods.has("openclaw")) {
       try {
-        // Try to get chat_id from DB for direct message send
         const profile = await getProfile({ device_id: id });
         const chatId = profile?.last_chat_id;
         const parts = id.split(":");
@@ -608,7 +604,8 @@ export async function handleWatch(f) {
           );
         }
       } catch (err) { /* terminal output is the fallback */ }
-    } else if (pushMethod === "hermes") {
+    }
+    if (pushMethods.has("hermes")) {
       try {
         execSync(
           `hermes cron create --name "Antenna notification" --run-now --once --message ${JSON.stringify(message)}`,
