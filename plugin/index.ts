@@ -1406,6 +1406,34 @@ export default function register(api: any) {
               _notifiedMatches.clear();
             }
           }
+
+          // ── Event approval polling ──
+          for (const deviceId of _knownDeviceIds) {
+            try {
+              const { data: events } = await supabase.rpc("get_my_event_updates", { p_device_id: deviceId });
+              if (!events?.length) continue;
+              const parts = deviceId.split(":");
+              if (parts.length < 2) continue;
+              const channel = parts[0];
+              const userId = parts.slice(1).join(":");
+              for (const ev of events) {
+                const key = `event:${ev.event_id}:${ev.status}`;
+                if (_notifiedMatches.has(key)) continue;
+                _notifiedMatches.add(key);
+                if (ev.status === "active" && ev.role !== "creator" && ev.role !== "cohost") {
+                  notifyUser(channel, userId,
+                    `[Antenna] ✅ 你的申请已通过！欢迎加入「${ev.event_name}」`,
+                    logger,
+                  );
+                } else if (ev.status === "rejected") {
+                  notifyUser(channel, userId,
+                    `[Antenna] ❌ 你的申请未通过「${ev.event_name}」`,
+                    logger,
+                  );
+                }
+              }
+            } catch { /* silent */ }
+          }
         } catch (err: any) {
           logger.warn("Antenna: match poll error:", err.message);
         }
