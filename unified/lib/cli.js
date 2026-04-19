@@ -564,7 +564,7 @@ export async function handleWatch(f) {
   const logFile = path.join(logDir, 'watch.log');
   try { if (!existsSync(logDir)) mkdirSync(logDir, { recursive: true }); } catch {}
   const logStream = await import('fs').then(fs => fs.createWriteStream(logFile, { flags: 'a' }));
-  const _log = (msg) => {
+  const _log = (msg = "") => {
     const line = `[${new Date().toISOString()}] ${msg}`;
     console.log(msg);
     try { logStream.write(line + '\n'); } catch {}
@@ -625,7 +625,7 @@ export async function handleWatch(f) {
       _log(`   ${m.emoji || "👤"} ${m.name}${m.their_contact ? " — contact: " + m.their_contact : ""}`);
     }
     saveNotified(notified);
-    _log();
+    _log("");
   }
   if (initial.incoming_accepts?.length) {
     _log(`📩 ${initial.incoming_accepts.length} person(s) want to meet you!`);
@@ -635,8 +635,17 @@ export async function handleWatch(f) {
       _log(`   ${m.emoji || "👤"} ${m.name} — ${m.line1 || ""}`);
     }
     saveNotified(notified);
-    _log();
+    _log("");
   }
+
+  // Seed notified set with current event states (don't push, just record)
+  try {
+    const { data: evts } = await sb.rpc("get_my_event_updates", { p_device_id: id });
+    for (const ev of (evts || [])) {
+      notified.add(`event:${ev.event_id}:${ev.status}`);
+    }
+    saveNotified(notified);
+  } catch { /* silent */ }
 
   // Subscribe to realtime changes on matches table
   const channel = sb

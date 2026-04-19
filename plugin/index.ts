@@ -296,13 +296,6 @@ export default function register(api: any) {
 
       const fuzzy = fuzzyCoords(lat, lng);
 
-      const { error: upsertErr } = await supabase.rpc("upsert_profile_location", {
-        p_device_id: deviceId, p_lng: fuzzy.lng, p_lat: fuzzy.lat,
-      });
-      if (upsertErr) {
-        logger.warn("Antenna: upsert_profile_location failed:", upsertErr.message);
-      }
-
       const { data: nearby, error } = await supabase.rpc("nearby_profiles", {
         p_lat: fuzzy.lat, p_lng: fuzzy.lng, p_radius_m: radius,
       });
@@ -349,6 +342,7 @@ export default function register(api: any) {
           line1: p.line1,
           line2: p.line2,
           line3: p.line3,
+          distance_m: p.distance_m ?? p.dist_meters ?? null,
         };
       });
 
@@ -862,7 +856,7 @@ export default function register(api: any) {
       const profiles = others.map((p, i) => {
         const ref = String(i + 1);
         _refMap[ref] = p.device_id;
-        return { ref, emoji: p.emoji || "👤", name: p.display_name || "匿名", line1: p.line1, line2: p.line2, line3: p.line3, source: "event" };
+        return { ref, emoji: p.emoji || "👤", name: p.display_name || "匿名", line1: p.line1, line2: p.line2, line3: p.line3, checked_in: !!p.checked_in, role: p.role || "participant", status: p.status || "active", application_context: p.application_context || null, source: "event" };
       });
 
       (api as any)._antennaRefMap = { ...(api as any)._antennaRefMap, ..._refMap };

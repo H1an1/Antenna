@@ -103,11 +103,6 @@ def handle_scan(params: dict) -> str:
 
     flat, flng = _fuzzy(lat, lng)
 
-    # Update own location
-    sb.rpc("upsert_profile_location", {
-        "p_device_id": did, "p_lng": flng, "p_lat": flat,
-    }).execute()
-
     # Query nearby
     resp = sb.rpc("nearby_profiles", {
         "p_lat": flat, "p_lng": flng, "p_radius_m": radius,
@@ -132,6 +127,7 @@ def handle_scan(params: dict) -> str:
             "line1": p.get("line1"),
             "line2": p.get("line2"),
             "line3": p.get("line3"),
+            "distance_m": p.get("distance_m") or p.get("dist_meters"),
         })
 
     return _ok({
