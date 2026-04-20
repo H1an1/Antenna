@@ -1,6 +1,6 @@
 {
   "name": "antenna-fyi",
-  "version": "1.2.38",
+  "version": "1.2.39",
   "description": "Antenna — nearby people discovery. CLI + MCP server + OpenClaw skill & plugin, all in one package.",
   "type": "module",
   "bin": {

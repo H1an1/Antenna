@@ -88,7 +88,7 @@ Scan for nearby people **and events**. Returns raw profile cards + active events
 - `lat`, `lng`: coordinates (from `LocationLat`/`LocationLon` context, or geocoded from user input)
 - `radius_m`: search radius in meters (default 500, max 1000) for people; events search uses 5km
 - `sender_id`: the user's id from message context
-- `channel`: the channel name (telegram, whatsapp, discord, etc.)
+- `channel`: the platform/channel name (any platform works: telegram, discord, whatsapp, webchat, signal, slack, matrix, clawx, etc.)
 - Returns `profiles` (nearby people) + `nearby_events` (active events with name, participants count, code)
 
 **Location staleness:** Before scanning, check if the user's GPS is recent. If `last_seen_at` is older than 2 hours, prompt the user to update their location (`antenna_bind` or `antenna_checkin`). Stale GPS = wrong results.
