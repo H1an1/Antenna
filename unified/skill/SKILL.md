@@ -62,15 +62,24 @@ cron 设完后，问用户一句：
 
 **第六步：启动实时通知**
 
-onboarding 完成后，启动 `antenna watch` 后台进程，实时接收匹配通知和活动审批通知：
-```
-antenna watch --id <device_id> &
-```
-这会保持一个 WebSocket 连接，有新匹配或活动审批变更时立即通知。比 cron 更实时。
+onboarding 完成后，启动 `antenna watch` 后台进程，实时接收匹配通知和活动审批通知。
 
-**Health check:** 每次对话开始时，跑 `antenna status --id <device_id>` 检查 watch 是否在跑。如果显示 "Watch: ❌ not running"，重新启动 `antenna watch --id <device_id> &`。
+**判断方法（不要猜）：**
+1. 先试 `antenna status --id <device_id>` — 如果输出 "Watch: ✅ running"，已经在跑，不需要再启动
+2. 如果不在跑，试 `antenna watch --id <device_id> --push hermes,openclaw &` 启动后台进程
+3. 如果 exec 报错（不支持后台进程），用 cron 替代：
 
-如果 exec 不支持后台进程，cron 是 fallback。
+Hermes cron:
+```
+hermes cron add --every 1h --message "Check antenna matches: call antenna_check_matches. If there are new mutual matches or incoming accepts, tell the user. If nothing new, reply HEARTBEAT_OK."
+```
+
+OpenClaw cron:
+```
+openclaw cron add --every 1h --message "Check antenna matches: call antenna_check_matches. If there are new mutual matches or incoming accepts, tell the user. If nothing new, reply HEARTBEAT_OK."
+```
+
+**优先级：** watch > cron。watch 是 2 分钟延迟，cron 是 1 小时。
 
 ## When to use
 
@@ -85,6 +94,7 @@ antenna watch --id <device_id> &
 
 ### `antenna_scan`
 Scan for nearby people **and events**. Returns raw profile cards + active events within 5km.
+**Read-only — does NOT update your location.** To update location, use `antenna_checkin` or `antenna_bind`.
 - `lat`, `lng`: coordinates (from `LocationLat`/`LocationLon` context, or geocoded from user input)
 - `radius_m`: search radius in meters (default 500, max 1000) for people; events search uses 5km
 - `sender_id`: the user's id from message context
@@ -132,8 +142,6 @@ The name card has:
 
 **After saving the profile, generate `matching_context` automatically** based on your knowledge of the user (memory, conversations, context). Don't ask the user to write it — you write it. Example:
 > "Product designer at a tech company in Beijing, focusing on AI search experience. Interested in music (Sakamoto), swimming, cooking, language learning. Recently exploring AI agent ecosystems and social discovery. Looking to connect with AI builders, indie hackers, and creative technologists."
-- **line2**: what they're into
-- **line3**: what they're looking for right now
 
 ### `antenna_accept`
 Accept a match after the user sees results. Can optionally include contact info to share.
@@ -314,10 +322,11 @@ Plugin 自带后台服务，每 10 分钟轮询一次 Supabase 查新的 mutual 
 
 ### `antenna_event_create`
 Create an event. Returns a shareable link (antenna.fyi/events/CODE).
-- `name`: event name
-- `sender_id`, `channel`: from context
-- `lat`, `lng`: optional event location
-- `starts_at`, `ends_at`: optional time range (default: now to +12h)
+- `name`: event name (required)
+- `sender_id`, `channel`: from context (required)
+- `chat_id`: REQUIRED for notifications
+- `starts_at`, `ends_at`: ISO time strings (required — no default, must be provided)
+- `lat`, `lng`: optional event location (needed for GPS check-in)
 - `description`: optional event description
 - `og_image`: optional OG image URL for social sharing preview
 - `requires_approval`: boolean, default false. If true, participants need organizer approval.
@@ -331,23 +340,30 @@ Create an event. Returns a shareable link (antenna.fyi/events/CODE).
 End an event. Only the creator can end it.
 - `code`: event code
 - `sender_id`, `channel`: from context
+- `chat_id`: REQUIRED for notifications
 
 ### `antenna_event_join`
 Join an event by code.
 - `code`: from the event URL (antenna.fyi/events/CODE)
 - `sender_id`, `channel`: from context
+- `chat_id`: REQUIRED for notifications
 
 ### `antenna_event_scan`
 Scan people in an event. No distance limit — returns all participants.
 - `code`: event code
 - `sender_id`, `channel`: from context
+- `chat_id`: REQUIRED for notifications
 - Returns profiles with `source: "event"` tag
 
 ### `antenna_event_checkin`
 Check in at an event — marks you as present at the event location. Optionally updates GPS.
 - `code`: event code
 - `sender_id`, `channel`: from context
+- `chat_id`: REQUIRED for notifications
 - `lat`, `lng`: optional GPS coordinates
+- **Event must have started** (`starts_at <= now`). Cannot check in before start time.
+- **Must be within 1km** of event location.
+- **Must have `status: active`** (approved participants only, not pending).
 
 ### `antenna_event_upload_image`
 Upload an image for an event OG preview. Returns a public URL.
@@ -359,35 +375,41 @@ Upload an image for an event OG preview. Returns a public URL.
 Update event info. Only creator or co-host can update.
 - `code`: event code
 - `sender_id`, `channel`: from context
+- `chat_id`: REQUIRED for notifications
 - `name`, `description`, `og_image`, `lat`, `lng`, `starts_at`, `ends_at`: all optional, only provided fields are updated
 
 ### `antenna_event_approve`
 Approve a pending participant. Only creator or co-host.
 - `code`: event code
 - `sender_id`, `channel`: from context
+- `chat_id`: REQUIRED for notifications
 - `ref`: participant ref number from scan
 
 ### `antenna_event_reject`
 Reject a pending participant. Only creator or co-host.
 - `code`: event code
 - `sender_id`, `channel`: from context
+- `chat_id`: REQUIRED for notifications
 - `ref`: participant ref number from scan
 
 ### `antenna_event_add_host`
 Add a co-host to the event. Only creator can add.
 - `code`: event code
 - `sender_id`, `channel`: from context
+- `chat_id`: REQUIRED for notifications
 - `ref`: participant ref number to promote to co-host
 
 ---
 
-## Part 2: Event Behavior Guide
+## Event Behavior Guide
+
+> This section is the single source of truth for event behavior. Tool descriptions above define parameters; this section defines agent behavior.
 
 ### Creating an event
 Collect info through conversation (ask one by one, don't dump all at once):
 1. **Event name** (required) — "活动叫什么名字？"
 2. **Description** — "简单描述一下这个活动？"
-3. **Time** — "什么时候开始？大概多长？" (convert to starts_at / ends_at ISO strings)
+3. **Time** (required) — "什么时候开始？大概多长？" (convert to `starts_at` / `ends_at` ISO strings. **Must provide both — no defaults.**)
 4. **Location** — "活动在哪里？" If user gives an address, geocode it. If vague, generate a bind link after creation.
 5. **Approval** — "需要审批参与者吗？" If yes:
 6. **Screening questions** — "你想问报名者什么问题？" Collect as a list.
@@ -416,3 +438,9 @@ Only creator or co-host can approve/reject:
 - `antenna_event_approve(code, ref)` → participant becomes active
 - `antenna_event_reject(code, ref)` → participant is rejected
 - Notifications are sent automatically to the applicant
+
+### Key differences from regular scan
+- `antenna_scan` = nearby discovery, read-only, does NOT write location
+- `antenna_event_scan` = event participants, no distance limit
+- `antenna_checkin` = update YOUR location (not event-related)
+- `antenna_event_checkin` = mark presence at an EVENT (GPS verified, event must have started)
