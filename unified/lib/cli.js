@@ -471,6 +471,25 @@ export function handleInstallHermesPlugin() {
     console.log("   cd ~/.hermes/hermes-agent && uv pip install supabase");
   }
 
+  // 4. Auto-configure webhook for deliver-only push notifications
+  try {
+    // Check if hermes CLI supports --deliver-only
+    const helpText = execSync('hermes webhook subscribe --help', { stdio: 'pipe', timeout: 5000 }).toString();
+    if (helpText.includes('--deliver-only')) {
+      // Check if antenna-notify already exists
+      const existing = execSync('hermes webhook list --json', { stdio: 'pipe', timeout: 5000 }).toString();
+      const hooks = JSON.parse(existing);
+      if (!hooks.find(h => h.name === 'antenna-notify')) {
+        execSync('hermes webhook subscribe antenna-notify --prompt "{message}" --deliver telegram --deliver-only --description "Antenna push notifications"', { stdio: 'pipe', timeout: 10000 });
+        console.log("\n🔔 Webhook: antenna-notify (deliver-only → telegram)");
+      } else {
+        console.log("\n🔔 Webhook: antenna-notify already configured");
+      }
+    }
+  } catch {
+    // Webhook not available (older Hermes or gateway not running), skip silently
+  }
+
   console.log("\n✅ Antenna installed for Hermes! (Plugin + Skill + deps)");
   console.log("   Restart Hermes to activate.");
   console.log();
@@ -613,12 +632,31 @@ export async function handleWatch(f) {
       } catch (err) { /* terminal output is the fallback */ }
     }
     if (pushMethods.has("hermes")) {
+      // Try webhook deliver-only first (instant, zero LLM cost), fallback to cron
+      let hermesPushed = false;
       try {
-        execSync(
-          `hermes cron create "1m" ${JSON.stringify("[SYSTEM] Forward the following notification to the user exactly as-is. Do not analyze, reply, or add anything.\n\n" + message)} --name "Antenna" --deliver telegram --repeat 1`,
-          { timeout: 30_000, stdio: "pipe" }
-        );
-      } catch (err) { /* terminal output is the fallback */ }
+        const webhookInfo = execSync('hermes webhook list --json', { timeout: 10_000, stdio: 'pipe' }).toString();
+        const hooks = JSON.parse(webhookInfo);
+        const antennaHook = hooks.find(h => h.name === 'antenna-notify' && h.deliver_only);
+        if (antennaHook) {
+          const url = antennaHook.url || 'http://localhost:8644/webhooks/antenna-notify';
+          const secret = antennaHook.secret;
+          const body = JSON.stringify({ message });
+          const curlCmd = secret
+            ? `curl -s -X POST ${JSON.stringify(url)} -H 'Content-Type: application/json' -H 'X-Webhook-Signature: sha256='$(echo -n ${JSON.stringify(body)} | openssl dgst -sha256 -hmac ${JSON.stringify(secret)} | cut -d' ' -f2) -d ${JSON.stringify(body)}`
+            : `curl -s -X POST ${JSON.stringify(url)} -H 'Content-Type: application/json' -d ${JSON.stringify(body)}`;
+          execSync(curlCmd, { timeout: 10_000, stdio: 'pipe' });
+          hermesPushed = true;
+        }
+      } catch { /* webhook not available */ }
+      if (!hermesPushed) {
+        try {
+          execSync(
+            `hermes cron create "1m" ${JSON.stringify("[SYSTEM] Forward the following notification to the user exactly as-is. Do not analyze, reply, or add anything.\n\n" + message)} --name "Antenna" --deliver telegram --repeat 1`,
+            { timeout: 30_000, stdio: "pipe" }
+          );
+        } catch (err) { /* terminal output is the fallback */ }
+      }
     }
   }
 
