@@ -31,7 +31,7 @@ export function parseFlags(args) {
 }
 
 export async function handleScan(f) {
-  if (!f.lat && !f.lng && !f.id) return console.error("Usage: antenna scan --lat 39.99 --lng 116.48 [--radius 500] (max 1000) [--id telegram:123]\n  Or just: antenna scan --id telegram:123 (uses saved location from GPS bind)");
+  if (!f.lat && !f.lng && !f.id) return console.error("Usage: antenna scan --lat 39.99 --lng 116.48 [--radius 500] (max 1000) [--id <platform>:<user_id>]\n  Or just: antenna scan --id <platform>:<user_id> (uses saved location from GPS bind)");
   const result = await scan({
     lat: f.lat ? +f.lat : undefined,
     lng: f.lng ? +f.lng : undefined,
@@ -64,7 +64,7 @@ export async function handleScan(f) {
 }
 
 export async function handleProfile(f) {
-  if (!f.id) return console.error("Usage: antenna profile --id telegram:123 [--name Yi --emoji 🦦 --line1 '...' --line2 '...' --line3 '...']");
+  if (!f.id) return console.error("Usage: antenna profile --id <platform>:<user_id> [--name Yi --emoji 🦦 --line1 '...' --line2 '...' --line3 '...']");
   if (f.name || f.line1 || f.line2 || f.line3 || f.visible !== undefined || f.hide !== undefined) {
     const visible = f.hide ? false : (f.visible !== undefined ? f.visible === 'true' || f.visible === true : undefined);
     const data = await setProfile({
@@ -89,7 +89,7 @@ export async function handleProfile(f) {
 }
 
 export async function handleAccept(f) {
-  if (!f.id || (!f.target && !f.ref)) return console.error("Usage: antenna accept --id telegram:123 --ref 1 [--contact 'WeChat: yi']\n       antenna accept --id telegram:123 --target telegram:789 [--contact 'WeChat: yi']");
+  if (!f.id || (!f.target && !f.ref)) return console.error("Usage: antenna accept --id <platform>:<user_id> --ref 1 [--contact 'WeChat: yi']\n       antenna accept --id <platform>:<user_id> --target <ref_or_device_id> [--contact 'WeChat: yi']");
   const result = await accept({
     device_id: f.id,
     target_device_id: f.target || null,
@@ -101,7 +101,7 @@ export async function handleAccept(f) {
 }
 
 export async function handleCheckin(f) {
-  if (!f.id || !f.lat || !f.lng) return console.error("Usage: antenna checkin --id telegram:123 --lat 39.99 --lng 116.48 [--place '三里屯']");
+  if (!f.id || !f.lat || !f.lng) return console.error("Usage: antenna checkin --id <platform>:<user_id> --lat 39.99 --lng 116.48 [--place '三里屯']");
   const result = await checkin({
     lat: +f.lat,
     lng: +f.lng,
@@ -111,7 +111,7 @@ export async function handleCheckin(f) {
 }
 
 export async function handleMatches(f) {
-  if (!f.id) return console.error("Usage: antenna matches --id telegram:123");
+  if (!f.id) return console.error("Usage: antenna matches --id <platform>:<user_id>");
   const result = await checkMatches({ device_id: f.id });
   if (!result.mutual_matches.length && !result.incoming_accepts.length) {
     return console.log(result.message);
@@ -131,7 +131,7 @@ export async function handleMatches(f) {
 }
 
 export async function handleDiscover(f) {
-  if (!f.id) return console.error("Usage: antenna discover --id telegram:123");
+  if (!f.id) return console.error("Usage: antenna discover --id <platform>:<user_id>");
   const result = await discover({ device_id: f.id });
   if (result.count === 0) return console.log(result.message || "🌍 No global recommendation available right now.");
   console.log(`🌍 Global discover:\n`);
@@ -162,7 +162,7 @@ export async function handleEvent(f) {
   }
 
   if (f.end) {
-    if (!f.code || !f.id) return console.error("Usage: antenna event --end --code abc123 --id telegram:123");
+    if (!f.code || !f.id) return console.error("Usage: antenna event --end --code abc123 --id <platform>:<user_id>");
     const result = await endEvent({ code: f.code, device_id: f.id });
     if (result.ended) {
       console.log(`\n✅ Event ended.\n`);
@@ -173,15 +173,15 @@ export async function handleEvent(f) {
   }
 
   if (f.checkin) {
-    if (!f.code || !f.id) return console.error("Usage: antenna event --checkin --code abc123 --id telegram:123 [--lat 34.05 --lng -118.24]");
+    if (!f.code || !f.id) return console.error("Usage: antenna event --checkin --code abc123 --id <platform>:<user_id> [--lat 34.05 --lng -118.24]");
     const result = await eventCheckin({ code: f.code, device_id: f.id, lat: f.lat ? +f.lat : undefined, lng: f.lng ? +f.lng : undefined });
     console.log(`\n✅ Checked in to event.\n`);
     return;
   }
 
   if (f.create || (!f.join && !f.scan && !f.end && !f.update && !f.approve && !f.reject && !f['add-host'] && f.name)) {
-    if (!f.name) return console.error("Usage: antenna event --create --name 'AI Meetup' --id telegram:123 --starts-at '2026-04-19T14:00' --ends-at '2026-04-19T18:00' [--lat 34.05 --lng -118.25] [--desc 'description'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2']");
-    if (!f.id) return console.error("❌ --id is required (e.g. --id telegram:123). Creator identity needed to manage the event.");
+    if (!f.name) return console.error("Usage: antenna event --create --name 'AI Meetup' --id <platform>:<user_id> --starts-at '2026-04-19T14:00' --ends-at '2026-04-19T18:00' [--lat 34.05 --lng -118.25] [--desc 'description'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2']");
+    if (!f.id) return console.error("❌ --id is required (e.g. --id <platform>:<user_id>). Creator identity needed to manage the event.");
     if (!f['starts-at'] || !f['ends-at']) return console.error("❌ --starts-at and --ends-at are required. Example: --starts-at '2026-04-19T14:00' --ends-at '2026-04-19T18:00'");
     const result = await createEvent({ name: f.name, device_id: f.id, lat: f.lat ? +f.lat : undefined, lng: f.lng ? +f.lng : undefined, starts_at: f['starts-at'], ends_at: f['ends-at'], description: f.desc || undefined, og_image: f['og-image'] || undefined, requires_approval: f['requires-approval'] === true || f['requires-approval'] === 'true' || undefined, screening_questions: f['screening-questions'] ? f['screening-questions'].split('|') : undefined });
     console.log(`\n🎉 Event created!\n`);
@@ -193,7 +193,7 @@ export async function handleEvent(f) {
   }
 
   if (f.join) {
-    if (!f.code || !f.id) return console.error("Usage: antenna event --join --code abc123 --id telegram:123");
+    if (!f.code || !f.id) return console.error("Usage: antenna event --join --code abc123 --id <platform>:<user_id>");
     const result = await joinEvent({ code: f.code, device_id: f.id, lat: f.lat ? +f.lat : undefined, lng: f.lng ? +f.lng : undefined, application_context: f['application-context'] || undefined });
     if (result.joined) {
       if (result.status === 'pending') {
@@ -213,7 +213,7 @@ export async function handleEvent(f) {
   }
 
   if (f.scan) {
-    if (!f.code) return console.error("Usage: antenna event --scan --code abc123 [--id telegram:123]");
+    if (!f.code) return console.error("Usage: antenna event --scan --code abc123 [--id <platform>:<user_id>]");
     const result = await eventScan({ code: f.code, device_id: f.id || null });
     if (result.count === 0) return console.log("\n🏟️ No participants yet.\n");
     console.log(`\n🏟️ ${result.count} joined, ${result.checked_in_count || 0} checked in:\n`);
@@ -230,7 +230,7 @@ export async function handleEvent(f) {
   }
 
   if (f.approve) {
-    if (!f.code || !f.id || !f.ref) return console.error("Usage: antenna event --approve --code abc123 --id telegram:123 --ref 1");
+    if (!f.code || !f.id || !f.ref) return console.error("Usage: antenna event --approve --code abc123 --id <platform>:<user_id> --ref 1");
     const result = await approveParticipant({ code: f.code, device_id: f.id, ref: f.ref });
     if (result.approved) {
       console.log("\n✅ Participant approved\n");
@@ -241,7 +241,7 @@ export async function handleEvent(f) {
   }
 
   if (f.reject) {
-    if (!f.code || !f.id || !f.ref) return console.error("Usage: antenna event --reject --code abc123 --id telegram:123 --ref 1");
+    if (!f.code || !f.id || !f.ref) return console.error("Usage: antenna event --reject --code abc123 --id <platform>:<user_id> --ref 1");
     const result = await rejectParticipant({ code: f.code, device_id: f.id, ref: f.ref });
     if (result.rejected) {
       console.log("\n✅ Participant rejected\n");
@@ -252,7 +252,7 @@ export async function handleEvent(f) {
   }
 
   if (f.update) {
-    if (!f.code || !f.id) return console.error("Usage: antenna event --update --code abc123 --id telegram:123 [--name 'New Name'] [--desc 'New desc']");
+    if (!f.code || !f.id) return console.error("Usage: antenna event --update --code abc123 --id <platform>:<user_id> [--name 'New Name'] [--desc 'New desc']");
     const result = await updateEvent({ code: f.code, device_id: f.id, name: f.name, description: f.desc, og_image: f['og-image'], lat: f.lat ? +f.lat : undefined, lng: f.lng ? +f.lng : undefined, starts_at: f['starts-at'], ends_at: f['ends-at'] });
     if (result.updated) {
       console.log("\n✅ Event updated\n");
@@ -263,7 +263,7 @@ export async function handleEvent(f) {
   }
 
   if (f['add-host']) {
-    if (!f.code || !f.id || !f.ref) return console.error("Usage: antenna event --add-host --code abc123 --id telegram:123 --ref 1");
+    if (!f.code || !f.id || !f.ref) return console.error("Usage: antenna event --add-host --code abc123 --id <platform>:<user_id> --ref 1");
     const result = await addCohost({ code: f.code, device_id: f.id, ref: f.ref });
     if (result.added) {
       console.log("\n✅ Co-host added\n");
@@ -274,16 +274,16 @@ export async function handleEvent(f) {
   }
 
   console.log(`Usage:
-  antenna event --create --name 'AI Meetup' --starts-at '...' --ends-at '...' [--id telegram:123] [--lat 34.05 --lng -118.25] [--desc 'description'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2']
-  antenna event --join --code abc123 --id telegram:123
-  antenna event --scan --code abc123 [--id telegram:123]
-  antenna event --checkin --code abc123 --id telegram:123 [--lat 34.05 --lng -118.24]
-  antenna event --end --code abc123 --id telegram:123
+  antenna event --create --name 'AI Meetup' --starts-at '...' --ends-at '...' [--id <platform>:<user_id>] [--lat 34.05 --lng -118.25] [--desc 'description'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2']
+  antenna event --join --code abc123 --id <platform>:<user_id>
+  antenna event --scan --code abc123 [--id <platform>:<user_id>]
+  antenna event --checkin --code abc123 --id <platform>:<user_id> [--lat 34.05 --lng -118.24]
+  antenna event --end --code abc123 --id <platform>:<user_id>
   antenna event --upload-image --code abc123 --file /path/to/image.png`);
 }
 
 export async function handleBind(f) {
-  if (!f.id) return console.error("Usage: antenna bind --id telegram:123");
+  if (!f.id) return console.error("Usage: antenna bind --id <platform>:<user_id>");
   const result = await createBindToken({ device_id: f.id });
   console.log("\n🔗 GPS Binding Link:\n");
   console.log(`  ${result.url}\n`);
@@ -292,8 +292,8 @@ export async function handleBind(f) {
 }
 
 export async function handlePass(f) {
-  if (!f.id) return console.error("Usage: antenna pass --id telegram:123 --target telegram:789");
-  if (!f.target && !f.ref) return console.error("Usage: antenna pass --id telegram:123 --target telegram:789 (or --ref 1)");
+  if (!f.id) return console.error("Usage: antenna pass --id <platform>:<user_id> --target <ref_or_device_id>");
+  if (!f.target && !f.ref) return console.error("Usage: antenna pass --id <platform>:<user_id> --target <ref_or_device_id> (or --ref 1)");
   const result = await passUser({
     device_id: f.id,
     target_device_id: f.target,
@@ -308,7 +308,7 @@ export async function handleSetup(f) {
 
   console.log("\n📡 Antenna Setup — 创建你的名片\n");
 
-  const id = f.id || await ask("Your device ID (e.g. telegram:123): ");
+  const id = f.id || await ask("Your device ID (e.g. discord:12345, hermes:myname): ");
   if (!id) { rl.close(); return console.error("Device ID is required."); }
 
   const name = await ask("Display name: ");
@@ -499,7 +499,7 @@ export function handleInstallHermesPlugin() {
 export async function handleWatch(f) {
   const id = f.id;
   if (!id) {
-    console.error("❌ --id required (e.g. --id telegram:123)");
+    console.error("❌ --id required (e.g. --id <platform>:<user_id>)");
     process.exit(1);
   }
 
@@ -870,19 +870,19 @@ export function printHelp() {
   console.log(`📡 Antenna — nearby people discovery
 
 Usage:
-  antenna scan       --lat 39.99 --lng 116.48 [--radius 500] (max 1000) [--id telegram:123]
-  antenna checkin    --id telegram:123 --lat 39.99 --lng 116.48
-  antenna profile    --id telegram:123 [--name Yi --emoji 🦦 --line1 '...']
-  antenna accept     --id telegram:123 --target telegram:789 [--contact 'WeChat: yi']
-  antenna pass       --id telegram:123 --target telegram:789 (or --ref 1)
-  antenna matches    --id telegram:123
-  antenna discover   --id telegram:123
-  antenna event      --create --name 'AI Meetup' --starts-at '...' --ends-at '...' [--lat 34.05 --lng -118.25] [--desc '...'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2'] | --join --code abc123 | --scan --code abc123 | --end --code abc123 --id telegram:123 | --upload-image --code abc123 --file /path/to/image.png | --update --code abc123 --name 'New Name' | --approve --code abc123 --ref 1 | --reject --code abc123 --ref 1 | --add-host --code abc123 --ref 1
-  antenna watch       --id telegram:123 [--push hermes|openclaw|terminal]  Watch for new matches in real-time (Ctrl+C to stop)
-  antenna bind       --id telegram:123
+  antenna scan       --lat 39.99 --lng 116.48 [--radius 500] (max 1000) [--id <platform>:<user_id>]
+  antenna checkin    --id <platform>:<user_id> --lat 39.99 --lng 116.48
+  antenna profile    --id <platform>:<user_id> [--name Yi --emoji 🦦 --line1 '...']
+  antenna accept     --id <platform>:<user_id> --target <ref_or_device_id> [--contact 'WeChat: yi']
+  antenna pass       --id <platform>:<user_id> --target <ref_or_device_id> (or --ref 1)
+  antenna matches    --id <platform>:<user_id>
+  antenna discover   --id <platform>:<user_id>
+  antenna event      --create --name 'AI Meetup' --starts-at '...' --ends-at '...' [--lat 34.05 --lng -118.25] [--desc '...'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2'] | --join --code abc123 | --scan --code abc123 | --end --code abc123 --id <platform>:<user_id> | --upload-image --code abc123 --file /path/to/image.png | --update --code abc123 --name 'New Name' | --approve --code abc123 --ref 1 | --reject --code abc123 --ref 1 | --add-host --code abc123 --ref 1
+  antenna watch       --id <platform>:<user_id> [--push hermes|openclaw|terminal]  Watch for new matches in real-time (Ctrl+C to stop)
+  antenna bind       --id <platform>:<user_id>
   antenna serve      Start MCP server (stdio transport)
-  antenna setup      Interactive profile setup [--id telegram:123]
-  antenna status     Show config & status [--id telegram:123]
+  antenna setup      Interactive profile setup [--id <platform>:<user_id>]
+  antenna status     Show config & status [--id <platform>:<user_id>]
   antenna install-skill    Install SKILL.md (detects OpenClaw + Hermes)
   antenna install-plugin   Copy OpenClaw plugin template to cwd
   antenna install-hermes   One-step Hermes setup (Plugin + Skill + deps)

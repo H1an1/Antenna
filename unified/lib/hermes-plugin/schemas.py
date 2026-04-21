@@ -21,7 +21,7 @@ SCAN_SCHEMA = {
             },
             "channel": {
                 "type": "string",
-                "description": "Platform name (telegram, discord, etc.)",
+                "description": "Platform name (any platform: telegram, discord, webchat, signal, slack, etc.)",
             },
         },
         "required": ["sender_id", "channel"],
@@ -148,7 +148,7 @@ PASS_SCHEMA = {
         "type": "object",
         "properties": {
             "sender_id": {"type": "string", "description": "The sender's user ID"},
-            "channel": {"type": "string", "description": "Platform name"},
+            "channel": {"type": "string", "description": "Platform name (any platform works)"},
             "ref": {
                 "type": "string",
                 "description": "Ref number from scan/discover results (e.g. '1')",
@@ -172,7 +172,7 @@ DISCOVER_SCHEMA = {
         "type": "object",
         "properties": {
             "sender_id": {"type": "string", "description": "The sender's user ID"},
-            "channel": {"type": "string", "description": "Platform name"},
+            "channel": {"type": "string", "description": "Platform name (any platform works)"},
         },
         "required": ["sender_id", "channel"],
     },
@@ -189,7 +189,7 @@ EVENT_CREATE_SCHEMA = {
         "properties": {
             "name": {"type": "string", "description": "Event name"},
             "sender_id": {"type": "string", "description": "The sender's user ID"},
-            "channel": {"type": "string", "description": "Platform name"},
+            "channel": {"type": "string", "description": "Platform name (any platform works)"},
             "lat": {"type": "number", "description": "Event latitude"},
             "lng": {"type": "number", "description": "Event longitude"},
             "starts_at": {"type": "string", "description": "Start time ISO (required)"},
@@ -211,7 +211,7 @@ EVENT_JOIN_SCHEMA = {
         "properties": {
             "code": {"type": "string", "description": "Event code"},
             "sender_id": {"type": "string", "description": "The sender's user ID"},
-            "channel": {"type": "string", "description": "Platform name"},
+            "channel": {"type": "string", "description": "Platform name (any platform works)"},
             "lat": {"type": "number", "description": "Latitude (optional, for auto-checkin)"},
             "lng": {"type": "number", "description": "Longitude (optional, for auto-checkin)"},
             "application_context": {"type": "string", "description": "Application context from screening conversation"},
@@ -228,7 +228,7 @@ EVENT_SCAN_SCHEMA = {
         "properties": {
             "code": {"type": "string", "description": "Event code"},
             "sender_id": {"type": "string", "description": "The sender's user ID"},
-            "channel": {"type": "string", "description": "Platform name"},
+            "channel": {"type": "string", "description": "Platform name (any platform works)"},
         },
         "required": ["code", "sender_id", "channel"],
     },
@@ -242,7 +242,7 @@ EVENT_END_SCHEMA = {
         "properties": {
             "code": {"type": "string", "description": "Event code"},
             "sender_id": {"type": "string", "description": "The sender's user ID"},
-            "channel": {"type": "string", "description": "Platform name"},
+            "channel": {"type": "string", "description": "Platform name (any platform works)"},
         },
         "required": ["code", "sender_id", "channel"],
     },
@@ -270,7 +270,7 @@ EVENT_CHECKIN_SCHEMA = {
         "properties": {
             "code": {"type": "string", "description": "Event code"},
             "sender_id": {"type": "string", "description": "The sender's user ID"},
-            "channel": {"type": "string", "description": "Platform name"},
+            "channel": {"type": "string", "description": "Platform name (any platform works)"},
             "lat": {"type": "number", "description": "Latitude (optional)"},
             "lng": {"type": "number", "description": "Longitude (optional)"},
         },

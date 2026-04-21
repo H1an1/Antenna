@@ -242,7 +242,8 @@ def handle_check_matches(params: dict) -> str:
             prof = sb.rpc("get_profile", {"p_device_id": m["device_id_b"]}).execute()
             p = prof.data or {}
             mutual.append({
-                "device_id": m["device_id_b"],
+                "ref": str(len(mutual) + 1),
+                "_device_id": m["device_id_b"],
                 "name": p.get("display_name") or "匿名",
                 "emoji": p.get("emoji") or "👤",
                 "their_contact": rev.get("contact_info_a"),
@@ -257,7 +258,8 @@ def handle_check_matches(params: dict) -> str:
             prof = sb.rpc("get_profile", {"p_device_id": m["device_id_a"]}).execute()
             p = prof.data or {}
             inc_only.append({
-                "device_id": m["device_id_a"],
+                "ref": str(len(inc_only) + 1),
+                "_device_id": m["device_id_a"],
                 "name": p.get("display_name") or "匿名",
                 "emoji": p.get("emoji") or "👤",
                 "line1": p.get("line1"),
@@ -499,7 +501,6 @@ def handle_event_scan(params: dict) -> str:
     if not others:
         return _ok({"count": 0, "profiles": [], "message": "活动里还没有其他人。"})
 
-    global _last_ref_map
     global _last_ref_map
     _last_ref_map = {}
     checked_in_count = 0

@@ -12,26 +12,26 @@ npm install -g antenna-fyi
 
 ```bash
 # Create your profile card
-antenna setup --id telegram:123
+antenna setup --id <platform>:<user_id>
 
 # Scan for nearby people
-antenna scan --lat 39.99 --lng 116.48 --radius 500 --id telegram:123
+antenna scan --lat 39.99 --lng 116.48 --radius 500 --id <platform>:<user_id>
 
 # Check in at a location
-antenna checkin --id telegram:123 --lat 39.99 --lng 116.48
+antenna checkin --id <platform>:<user_id> --lat 39.99 --lng 116.48
 
 # View/edit your profile
-antenna profile --id telegram:123
-antenna profile --id telegram:123 --name Yi --emoji 🦦 --line1 'Product Designer'
+antenna profile --id <platform>:<user_id>
+antenna profile --id <platform>:<user_id> --name Yi --emoji 🦦 --line1 'Product Designer'
 
 # Accept a match
-antenna accept --id telegram:123 --target telegram:789 --contact 'WeChat: yi'
+antenna accept --id <platform>:<user_id> --target <ref_or_id> --contact 'WeChat: yi'
 
 # Check match status
-antenna matches --id telegram:123
+antenna matches --id <platform>:<user_id>
 
 # Show status
-antenna status --id telegram:123
+antenna status --id <platform>:<user_id>
 ```
 
 ## MCP Server

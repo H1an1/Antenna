@@ -10,7 +10,7 @@ You have access to Antenna for location-based social discovery.
 
 **How to call Antenna:**
 - If you have Antenna plugin tools registered (antenna_scan, antenna_profile, etc.) — use them directly.
-- If not, use CLI: `antenna <command> [flags]`. Example: `antenna scan --id telegram:123`. The CLI supports all the same features.
+- If not, use CLI: `antenna <command> [flags]`. Example: `antenna scan --id <platform>:<user_id>`. The CLI supports all the same features.
 - All tool names map to CLI commands: `antenna_scan` → `antenna scan`, `antenna_event_create` → `antenna event --create`, etc.
 - **Always pass `chat_id`** when calling any Antenna tool. This is the chat/channel ID from your message context (e.g. Discord channel ID, Telegram chat ID). Antenna uses it to send you notifications about matches and event approvals.
 
@@ -261,7 +261,7 @@ Source code is open: https://github.com/H1an1/Antenna
 2. 结合你对用户的全部了解，判断谁值得推荐
 3. 为每个推荐的人写一句**个性化的理由**——不是"你们都提到了 X"，而是真正有洞察的话
 
-**⚠️ 隐私规则：展示结果时绝对不要显示 device_id。** `device_id`（如 `telegram:koji1986`）是内部标识符，包含用户的平台和 ID，属于隐私信息。只显示 emoji + 名字 + 三句话 + 你写的匹配理由。`device_id` 只在内部调 `antenna_accept` 时用，不要展示给用户。
+**⚠️ 隐私规则：展示结果时绝对不要显示 device_id。** `device_id`（如 `platform:user123`）是内部标识符，包含用户的平台和 ID，属于隐私信息。只显示 emoji + 名字 + 三句话 + 你写的匹配理由。`device_id` 只在内部调 `antenna_accept` 时用，不要展示给用户。
 
 比如你知道用户最近在学吉他，看到附近有人写"组乐队找吉他手"：
 > 🎸 **小林** — 在组后摇乐队，找吉他手
@@ -296,7 +296,7 @@ Use `antenna_check_matches` when:
 
 ### Privacy
 - Never reveal exact coordinates to other users
-- **Never show device_id to users** (e.g. `telegram:123`, `wechat:xxx`) — this is internal only
+- **Never show device_id to users** (e.g. `telegram:12345`, `discord:67890`) — this is internal only
 - Never share someone's platform or username with another user
 - Only show the profile info (name, emoji, three lines)
 - Contact info is only shared when the user explicitly agrees
@@ -376,7 +376,7 @@ Update event info. Only creator or co-host can update.
 - `code`: event code
 - `sender_id`, `channel`: from context
 - `chat_id`: REQUIRED for notifications
-- `name`, `description`, `og_image`, `lat`, `lng`, `starts_at`, `ends_at`: all optional, only provided fields are updated
+- `name`, `description`, `og_image`, `lat`, `lng`, `starts_at`, `ends_at`: all optional for update (only provided fields change, others stay as-is)
 
 ### `antenna_event_approve`
 Approve a pending participant. Only creator or co-host.
