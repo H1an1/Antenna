@@ -197,7 +197,7 @@ def register(ctx):
                 if resp.data:
                     for evt in resp.data:
                         hints.append(
-                            f"[Antenna] 📡 用户 {evt['device_id']} 通过网页分享了位置 "
+                            f"[Antenna] 📡 有用户通过网页分享了位置 "
                             f"({evt['lat']}, {evt['lng']})。"
                             f"请使用 antenna_scan 查看附近有谁。"
                         )

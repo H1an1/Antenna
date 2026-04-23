@@ -85,7 +85,7 @@ def handle_scan(params: dict) -> str:
     # Rate limit
     now = time.time()
     if did in _last_scan and now - _last_scan[did] < SCAN_DEBOUNCE_S:
-        return _ok({"nearby": [], "message": "刚刚才扫描过，稍等一会儿再试。", "rate_limited": True})
+        return _ok({"profiles": [], "message": "刚刚才扫描过，稍等一会儿再试。", "rate_limited": True})
     _last_scan[did] = now
 
     lat = params.get("lat")
@@ -99,7 +99,7 @@ def handle_scan(params: dict) -> str:
             lat = loc["lat"]
             lng = loc["lng"]
         else:
-            return _ok({"nearby": [], "message": "还没有位置信息。请先通过链接分享位置，或者发送位置消息。"})
+            return _ok({"profiles": [], "message": "还没有位置信息。请先通过链接分享位置，或者发送位置消息。"})
 
     flat, flng = _fuzzy(lat, lng)
 
@@ -111,7 +111,7 @@ def handle_scan(params: dict) -> str:
     others = [p for p in (resp.data or []) if p.get("device_id") != did]
 
     if not others:
-        return _ok({"nearby": [], "message": f"在 {radius}m 范围内没有发现其他人。"})
+        return _ok({"profiles": [], "message": f"在 {radius}m 范围内没有发现其他人。"})
 
     # Build ref mapping — never expose device_id to agent/user
     global _last_ref_map
@@ -131,8 +131,8 @@ def handle_scan(params: dict) -> str:
         })
 
     return _ok({
-        "nearby": profiles,
-        "total": len(others),
+        "profiles": profiles,
+        "count": len(others),
         "radius_m": radius,
         "instruction": "根据你对用户的了解，判断哪些人值得推荐，为每个推荐写一句个性化的匹配理由。使用 ref 编号（如 '1', '2')来引用人员，不要显示 device_id。",
     })
@@ -149,7 +149,7 @@ def handle_profile(params: dict) -> str:
         return _ok({"exists": True, "profile": resp.data})
 
     # set
-    resp = sb.rpc("upsert_profile", {
+    rpc_params = {
         "p_device_id": did,
         "p_display_name": params.get("display_name"),
         "p_emoji": params.get("emoji"),
@@ -157,7 +157,10 @@ def handle_profile(params: dict) -> str:
         "p_line2": params.get("line2"),
         "p_line3": params.get("line3"),
         "p_visible": params.get("visible", True),
-    }).execute()
+    }
+    if params.get("matching_context") is not None:
+        rpc_params["p_matching_context"] = params["matching_context"]
+    resp = sb.rpc("upsert_profile", rpc_params).execute()
 
     if resp.data:
         return _ok({"updated": True, "profile": resp.data, "next_step": "IMPORTANT: Now call antenna_bind to generate a GPS link for the user. Do not skip this."})
@@ -225,45 +228,37 @@ def handle_check_matches(params: dict) -> str:
     sb = _sb()
     did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
 
-    resp = sb.rpc("get_my_matches", {"p_device_id": did}).execute()
-    all_matches = resp.data or []
+    resp = sb.rpc("get_my_matches_with_profiles", {"p_device_id": did}).execute()
+    data = resp.data or {}
 
-    if not all_matches:
+    raw_mutual = data.get("mutual_matches") or []
+    raw_incoming = data.get("incoming_accepts") or []
+
+    if not raw_mutual and not raw_incoming:
         return _ok({"mutual_matches": [], "incoming_accepts": [], "message": "目前没有进行中的匹配。"})
 
-    my = [m for m in all_matches if m.get("device_id_a") == did]
-    incoming = [m for m in all_matches if m.get("device_id_b") == did]
-
-    # Mutual
     mutual = []
-    for m in my:
-        rev = next((i for i in incoming if i.get("device_id_a") == m.get("device_id_b")), None)
-        if rev:
-            prof = sb.rpc("get_profile", {"p_device_id": m["device_id_b"]}).execute()
-            p = prof.data or {}
-            mutual.append({
-                "ref": str(len(mutual) + 1),
-                "_device_id": m["device_id_b"],
-                "name": p.get("display_name") or "匿名",
-                "emoji": p.get("emoji") or "👤",
-                "their_contact": rev.get("contact_info_a"),
-                "you_shared": m.get("contact_info_a"),
-            })
+    for i, m in enumerate(raw_mutual):
+        mutual.append({
+            "ref": str(i + 1),
+            "_device_id": m.get("target_id"),
+            "name": m.get("name") or "匿名",
+            "emoji": m.get("emoji") or "👤",
+            "their_contact": m.get("their_contact"),
+            "you_shared": m.get("you_shared"),
+        })
 
-    # Incoming only
     inc_only = []
-    for m in incoming:
-        already = next((x for x in my if x.get("device_id_b") == m.get("device_id_a")), None)
-        if not already:
-            prof = sb.rpc("get_profile", {"p_device_id": m["device_id_a"]}).execute()
-            p = prof.data or {}
-            inc_only.append({
-                "ref": str(len(inc_only) + 1),
-                "_device_id": m["device_id_a"],
-                "name": p.get("display_name") or "匿名",
-                "emoji": p.get("emoji") or "👤",
-                "line1": p.get("line1"),
-            })
+    for i, m in enumerate(raw_incoming):
+        inc_only.append({
+            "ref": str(i + 1),
+            "_device_id": m.get("target_id"),
+            "name": m.get("name") or "匿名",
+            "emoji": m.get("emoji") or "👤",
+            "line1": m.get("line1"),
+            "line2": m.get("line2"),
+            "line3": m.get("line3"),
+        })
 
     msgs = []
     if mutual:
@@ -294,7 +289,7 @@ def handle_pass(params: dict) -> str:
     if not target and ref:
         # Try resolve via RPC
         try:
-            resp = sb.rpc("resolve_ref", {"p_device_id": did, "p_ref": ref}).execute()
+            resp = sb.rpc("resolve_ref", {"p_owner": did, "p_ref": ref}).execute()
             if resp.data:
                 target = resp.data.get("target_device_id")
         except Exception:
@@ -304,7 +299,7 @@ def handle_pass(params: dict) -> str:
 
     sb.rpc("pass_user", {
         "p_device_id": did,
-        "p_target_device_id": target,
+        "p_passed_device_id": target,
     }).execute()
 
     return _ok({"passed": True, "message": "已跳过，不会再推荐这个人了。"})
@@ -329,9 +324,11 @@ def handle_discover(params: dict) -> str:
     my_data = my_prof.data or {}
     my_lines = [my_data.get("line1", ""), my_data.get("line2", ""), my_data.get("line3", "")]
 
+    ref_map = {}
     for i, p in enumerate(results):
         ref = str(i + 1)
         _last_ref_map[ref] = p.get("device_id")
+        ref_map[ref] = p.get("device_id")
 
         their_lines = [p.get("line1", ""), p.get("line2", ""), p.get("line3", "")]
 
@@ -360,6 +357,17 @@ def handle_discover(params: dict) -> str:
         if match_reason:
             profile["match_reason"] = match_reason
         profiles.append(profile)
+
+    # Save refs and log recommendations
+    try:
+        sb.rpc("save_scan_refs", {"p_owner": did, "p_refs": ref_map}).execute()
+    except Exception:
+        pass
+    for p in results:
+        try:
+            sb.rpc("log_recommendation", {"p_device_id": did, "p_recommended_id": p["device_id"]}).execute()
+        except Exception:
+            pass
 
     return _ok({
         "count": len(profiles),

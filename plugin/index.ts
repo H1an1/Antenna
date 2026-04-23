@@ -268,7 +268,7 @@ export default function register(api: any) {
         channel: { type: "string", description: "The channel name" },
         chat_id: { type: "string", description: "REQUIRED for notifications. Pass the chat/channel ID from your message context so Antenna can send you match and event notifications." },
       },
-      required: ["sender_id", "channel"],
+      required: ["sender_id", "channel", "chat_id"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
@@ -277,7 +277,7 @@ export default function register(api: any) {
       const radius = params.radius_m ?? cfg.defaultRadiusM ?? 500;
 
       if (isRateLimited(deviceId)) {
-        return ok({ nearby: [], message: "刚刚才扫描过，稍等一会儿再试。", rate_limited: true });
+        return ok({ profiles: [], message: "刚刚才扫描过，稍等一会儿再试。", rate_limited: true });
       }
 
       let lat = params.lat;
@@ -290,7 +290,7 @@ export default function register(api: any) {
           lat = loc.lat;
           lng = loc.lng;
         } else {
-          return ok({ nearby: [], message: "还没有位置信息。请先通过链接分享位置，或者发送位置消息。" });
+          return ok({ profiles: [], message: "还没有位置信息。请先通过链接分享位置，或者发送位置消息。" });
         }
       }
 
@@ -323,11 +323,11 @@ export default function register(api: any) {
             try { await supabase.rpc("log_recommendation", { p_device_id: deviceId, p_recommended_id: p.device_id }); } catch {}
           }
           return ok({
-            nearby: gProfiles, total: gProfiles.length, radius_m: radius, global: true,
+            profiles: gProfiles, count: gProfiles.length, radius_m: radius, global: true,
             message: `附近 ${radius}m 暂时没人。今天的全球推荐——这个人跟你可能聊得来。（每天 1 次）`,
           });
         }
-        return ok({ nearby: [], message: `附近暂时没人，今天的全球推荐已经用完了。明天再来！` });
+        return ok({ profiles: [], message: `附近暂时没人，今天的全球推荐已经用完了。明天再来！` });
       }
 
       // Build ref mapping — never expose device_id
@@ -353,8 +353,8 @@ export default function register(api: any) {
       } catch { /* best effort */ }
 
       return ok({
-        nearby: profiles,
-        total: others.length,
+        profiles: profiles,
+        count: others.length,
         radius_m: radius,
         instruction: "根据你对用户的了解，判断哪些人值得推荐，用 ref 编号引用。不要显示 device_id。",
       });
@@ -381,8 +381,9 @@ export default function register(api: any) {
         line2: { type: "string", description: "Second line (what you're into)" },
         line3: { type: "string", description: "Third line (what you're looking for)" },
         visible: { type: "boolean", description: "Whether to be visible to others" },
+        matching_context: { type: "string", description: "Free-form context for AI matching (interests, goals, etc.)" },
       },
-      required: ["action", "sender_id", "channel"],
+      required: ["action", "sender_id", "channel", "chat_id"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
@@ -406,6 +407,7 @@ export default function register(api: any) {
         p_display_name: params.display_name ?? null, p_emoji: params.emoji ?? null,
         p_line1: params.line1 ?? null, p_line2: params.line2 ?? null,
         p_line3: params.line3 ?? null, p_visible: params.visible ?? true,
+        ...(params.matching_context != null ? { p_matching_context: params.matching_context } : {}),
       });
 
       if (error) return ok({ error: error.message });
@@ -436,7 +438,7 @@ export default function register(api: any) {
         chat_id: { type: "string", description: "REQUIRED for notifications. Pass the chat/channel ID from your message context so Antenna can send you match and event notifications." },
         place_name: { type: "string", description: "Optional: name of the place (for confirmation message)" },
       },
-      required: ["lat", "lng", "sender_id", "channel"],
+      required: ["lat", "lng", "sender_id", "channel", "chat_id"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
@@ -484,7 +486,7 @@ export default function register(api: any) {
         target_device_id: { type: "string", description: "Device ID (use ref instead when possible)" },
         contact_info: { type: "string", description: "Optional contact info to share" },
       },
-      required: ["sender_id", "channel"],
+      required: ["sender_id", "channel", "chat_id"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
@@ -560,7 +562,7 @@ export default function register(api: any) {
         purpose: { type: "string", description: "'profile' (default) or 'event'" },
         event_code: { type: "string", description: "Event code (required when purpose=event)" },
       },
-      required: ["sender_id", "channel"],
+      required: ["sender_id", "channel", "chat_id"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
@@ -601,7 +603,7 @@ export default function register(api: any) {
         channel: { type: "string", description: "The channel name" },
         chat_id: { type: "string", description: "REQUIRED for notifications. Pass the chat/channel ID from your message context so Antenna can send you match and event notifications." },
       },
-      required: ["sender_id", "channel"],
+      required: ["sender_id", "channel", "chat_id"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
@@ -690,7 +692,7 @@ export default function register(api: any) {
         requires_approval: { type: "boolean", description: "Require host approval to join (default false)" },
         screening_questions: { type: "array", items: { type: "string" }, description: "Screening questions for applicants" },
       },
-      required: ["name", "sender_id", "channel", "starts_at", "ends_at"],
+      required: ["name", "sender_id", "channel", "starts_at", "ends_at", "chat_id"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
@@ -727,7 +729,7 @@ export default function register(api: any) {
         channel: { type: "string" },
         chat_id: { type: "string", description: "REQUIRED for notifications. Pass the chat/channel ID from your message context so Antenna can send you match and event notifications." },
       },
-      required: ["code", "sender_id", "channel"],
+      required: ["code", "sender_id", "channel", "chat_id"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
@@ -759,7 +761,7 @@ export default function register(api: any) {
         lng: { type: "number", description: "Longitude (optional, for auto-checkin)" },
         application_context: { type: "string", description: "Application context from screening conversation" },
       },
-      required: ["code", "sender_id", "channel"],
+      required: ["code", "sender_id", "channel", "chat_id"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
@@ -783,7 +785,7 @@ export default function register(api: any) {
         } catch {}
       }
 
-      const { data, error } = await supabase.rpc("join_event", { p_code: params.code, p_device_id: deviceId, p_application_context: params.application_context || null });
+      const { data, error } = await supabase.rpc("join_event", { p_code: params.code, p_device_id: deviceId, p_lat: lat || null, p_lng: lng || null, p_application_context: params.application_context || null });
       if (error) return ok({ error: error.message });
       if (!data?.joined) return ok(data);
 
@@ -841,7 +843,7 @@ export default function register(api: any) {
         channel: { type: "string" },
         chat_id: { type: "string", description: "REQUIRED for notifications. Pass the chat/channel ID from your message context so Antenna can send you match and event notifications." },
       },
-      required: ["code", "sender_id", "channel"],
+      required: ["code", "sender_id", "channel", "chat_id"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
@@ -881,7 +883,7 @@ export default function register(api: any) {
         ref: { type: "string", description: "Ref number from scan/discover results" },
         target_device_id: { type: "string", description: "Device ID (use ref instead when possible)" },
       },
-      required: ["sender_id", "channel"],
+      required: ["sender_id", "channel", "chat_id"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
@@ -918,7 +920,7 @@ export default function register(api: any) {
         lat: { type: "number", description: "Latitude (optional)" },
         lng: { type: "number", description: "Longitude (optional)" },
       },
-      required: ["code", "sender_id", "channel"],
+      required: ["code", "sender_id", "channel", "chat_id"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
@@ -977,60 +979,44 @@ export default function register(api: any) {
         channel: { type: "string" },
         chat_id: { type: "string", description: "REQUIRED for notifications. Pass the chat/channel ID from your message context so Antenna can send you match and event notifications." },
       },
-      required: ["sender_id", "channel"],
+      required: ["sender_id", "channel", "chat_id"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
       const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
 
-      const { data: allMatches } = await supabase.rpc("get_my_matches", { p_device_id: deviceId });
+      const { data: result } = await supabase.rpc("get_my_matches_with_profiles", { p_device_id: deviceId });
 
-      if (!allMatches?.length) {
+      const rawMutual = result?.mutual_matches || [];
+      const rawIncoming = result?.incoming_accepts || [];
+
+      if (!rawMutual.length && !rawIncoming.length) {
         return ok({ mutual_matches: [], incoming_accepts: [], message: "目前没有进行中的匹配。" });
       }
 
-      // Matches I initiated
-      const myMatches = allMatches.filter((m: any) => m.device_id_a === deviceId);
-      // Matches where someone else accepted me
-      const incomingMatches = allMatches.filter((m: any) => m.device_id_b === deviceId);
+      const mutualMatches = rawMutual.map((m: any, i: number) => ({
+        ref: String(i + 1),
+        _device_id: m.target_id,
+        name: m.name || "匿名",
+        emoji: m.emoji || "👤",
+        line1: m.line1, line2: m.line2, line3: m.line3,
+        their_contact: m.their_contact || null,
+        you_shared: m.you_shared || null,
+      }));
 
-      // --- Mutual matches (both sides accepted) ---
-      const mutualMatches = [];
-      for (const match of myMatches) {
-        const reverse = incomingMatches.find(
-          (m: any) => m.device_id_a === match.device_id_b
-        );
-        if (reverse) {
-          // Clean up follow-up crons for this mutual pair
-          stopFollowUpCron(deviceId, match.device_id_b, logger);
-          stopFollowUpCron(match.device_id_b, deviceId, logger);
+      const incomingAccepts = rawIncoming.map((m: any, i: number) => ({
+        ref: String(i + 1),
+        _device_id: m.target_id,
+        name: m.name || "匿名",
+        emoji: m.emoji || "👤",
+        line1: m.line1, line2: m.line2, line3: m.line3,
+      }));
 
-          const { data: profile } = await supabase.rpc("get_profile", { p_device_id: match.device_id_b });
-          mutualMatches.push({
-            device_id: match.device_id_b,
-            name: profile?.display_name || "匿名", emoji: profile?.emoji || "👤",
-            line1: profile?.line1, line2: profile?.line2, line3: profile?.line3,
-            their_contact: reverse.contact_info_a || null, you_shared: match.contact_info_a || null,
-          });
-        }
-      }
-
-      // --- Incoming accepts (someone accepted me but I haven't accepted them yet) ---
-      const incomingAccepts = [];
-      for (const match of incomingMatches) {
-        const iAccepted = myMatches.find(
-          (m: any) => m.device_id_b === match.device_id_a
-        );
-        if (!iAccepted) {
-          // They accepted me but I haven't responded
-          const { data: profile } = await supabase.rpc("get_profile", { p_device_id: match.device_id_a });
-          incomingAccepts.push({
-            device_id: match.device_id_a,
-            name: profile?.display_name || "匿名", emoji: profile?.emoji || "👤",
-            line1: profile?.line1, line2: profile?.line2, line3: profile?.line3,
-          });
-        }
+      // Clean up follow-up crons for mutual matches
+      for (const m of mutualMatches) {
+        stopFollowUpCron(deviceId, m._device_id, logger);
+        stopFollowUpCron(m._device_id, deviceId, logger);
       }
 
       const messages = [];
@@ -1067,7 +1053,7 @@ export default function register(api: any) {
         starts_at: { type: "string", description: "New start time ISO" },
         ends_at: { type: "string", description: "New end time ISO" },
       },
-      required: ["code", "sender_id", "channel"],
+      required: ["code", "sender_id", "channel", "chat_id"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
@@ -1099,7 +1085,7 @@ export default function register(api: any) {
         chat_id: { type: "string", description: "REQUIRED for notifications. Pass the chat/channel ID from your message context so Antenna can send you match and event notifications." },
         ref: { type: "string", description: "Ref number of the participant to approve" },
       },
-      required: ["code", "sender_id", "channel", "ref"],
+      required: ["code", "sender_id", "channel", "ref", "chat_id"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
@@ -1128,7 +1114,7 @@ export default function register(api: any) {
         chat_id: { type: "string", description: "REQUIRED for notifications. Pass the chat/channel ID from your message context so Antenna can send you match and event notifications." },
         ref: { type: "string", description: "Ref number of the participant to reject" },
       },
-      required: ["code", "sender_id", "channel", "ref"],
+      required: ["code", "sender_id", "channel", "ref", "chat_id"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
@@ -1157,7 +1143,7 @@ export default function register(api: any) {
         chat_id: { type: "string", description: "REQUIRED for notifications. Pass the chat/channel ID from your message context so Antenna can send you match and event notifications." },
         ref: { type: "string", description: "Ref number of the participant to make co-host" },
       },
-      required: ["code", "sender_id", "channel", "ref"],
+      required: ["code", "sender_id", "channel", "ref", "chat_id"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);

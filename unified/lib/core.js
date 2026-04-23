@@ -146,7 +146,7 @@ export async function scan({ lat, lng, radius_m = 500, device_id, supabaseUrl, s
       radius_m,
       profiles: [],
       _ref_map: {},
-      message: `附近暂时没人，今天的全球推荐已经用完了。明天再来！`,
+      message: `附近暂时没人，今天的全球推荐也用完了。明天再来！提示：Antenna 每天有 1 次全球推荐（antenna_discover），下次可以试试。`,
     };
   }
 

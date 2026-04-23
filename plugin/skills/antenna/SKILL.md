@@ -230,7 +230,7 @@ Source code is open: https://github.com/H1an1/Antenna
 > "最后——你想被叫什么？再选个 emoji 代表你自己。"
 
 **第六步：确认**
-把名片组装好，展示给用户确认：
+把名片组装好，**确认三行都有内容后**展示给用户确认：
 > 你的名片：
 >
 > 🎸 **小林**
@@ -240,7 +240,8 @@ Source code is open: https://github.com/H1an1/Antenna
 >
 > 看看有没有要改的？OK 的话我就存了。
 
-用户说 OK → `antenna_profile` action="set" 保存。
+用户说 OK → **检查 line1、line2、line3 都不为空后** 调 `antenna_profile` action="set" 保存。
+如果某一行为空，先问用户补完再保存。后端会拒绝没有 line1 的新 profile，并对缺失的 line2/line3 返回 warning。
 用户说要改 → 改完再确认。
 
 **关键原则：**
@@ -252,6 +253,10 @@ Source code is open: https://github.com/H1an1/Antenna
 - **提醒用户不要在名片里写联系方式（微信号、手机号等）。** 名片三句话对所有人可见。联系方式应该在 accept 时单独分享，这样只有双方都同意后才能看到。
 
 ### Showing results — 你来判断，不是服务器
+
+**第一次 scan 的新用户：** 简短一句解释："这是附近的人。Antenna 基于 AI 匹配，看到感兴趣的人 accept，双向匹配后交换联系方式。"
+
+**Profile 不完整时：** 如果用户的 profile 只有 1 行，提示："你的名片只填了一行，补完后匹配质量会更好。要现在补吗？"
 
 `antenna_scan` 返回的是附近所有人的名片，**没有打分、没有预匹配**。你需要：
 

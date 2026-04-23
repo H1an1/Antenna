@@ -23,8 +23,12 @@ SCAN_SCHEMA = {
                 "type": "string",
                 "description": "Platform name (any platform: telegram, discord, webchat, signal, slack, etc.)",
             },
+            "chat_id": {
+                "type": "string",
+                "description": "REQUIRED for notifications. Pass chat/channel ID from message context.",
+            },
         },
-        "required": ["sender_id", "channel"],
+        "required": ["sender_id", "channel", "chat_id"],
     },
 }
 
@@ -51,8 +55,9 @@ PROFILE_SCHEMA = {
             "line2": {"type": "string", "description": "What you're into"},
             "line3": {"type": "string", "description": "What you're looking for"},
             "visible": {"type": "boolean", "description": "Visible to others"},
+            "matching_context": {"type": "string", "description": "Free-form context for AI matching (interests, goals, etc.)"},
         },
-        "required": ["action", "sender_id", "channel"],
+        "required": ["action", "sender_id", "channel", "chat_id"],
     },
 }
 
@@ -81,7 +86,7 @@ ACCEPT_SCHEMA = {
                 "description": "Contact info to share (e.g. 'WeChat: yi')",
             },
         },
-        "required": ["sender_id", "channel"],
+        "required": ["sender_id", "channel", "chat_id"],
     },
 }
 
@@ -103,7 +108,7 @@ CHECKIN_SCHEMA = {
                 "description": "Name of the place (optional)",
             },
         },
-        "required": ["lat", "lng", "sender_id", "channel"],
+        "required": ["lat", "lng", "sender_id", "channel", "chat_id"],
     },
 }
 
@@ -119,7 +124,7 @@ CHECK_MATCHES_SCHEMA = {
             "channel": {"type": "string"},
             "chat_id": {"type": "string", "description": "REQUIRED for notifications. Pass chat/channel ID from message context."},
         },
-        "required": ["sender_id", "channel"],
+        "required": ["sender_id", "channel", "chat_id"],
     },
 }
 
@@ -137,7 +142,7 @@ BIND_SCHEMA = {
             "purpose": {"type": "string", "description": "'profile' (default) or 'event'"},
             "event_code": {"type": "string", "description": "Event code (when purpose=event)"},
         },
-        "required": ["sender_id", "channel"],
+        "required": ["sender_id", "channel", "chat_id"],
     },
 }
 
@@ -149,6 +154,7 @@ PASS_SCHEMA = {
         "properties": {
             "sender_id": {"type": "string", "description": "The sender's user ID"},
             "channel": {"type": "string", "description": "Platform name (any platform works)"},
+            "chat_id": {"type": "string", "description": "REQUIRED for notifications. Pass chat/channel ID from message context."},
             "ref": {
                 "type": "string",
                 "description": "Ref number from scan/discover results (e.g. '1')",
@@ -158,7 +164,7 @@ PASS_SCHEMA = {
                 "description": "Device ID (use ref instead when possible)",
             },
         },
-        "required": ["sender_id", "channel"],
+        "required": ["sender_id", "channel", "chat_id"],
     },
 }
 
@@ -173,8 +179,9 @@ DISCOVER_SCHEMA = {
         "properties": {
             "sender_id": {"type": "string", "description": "The sender's user ID"},
             "channel": {"type": "string", "description": "Platform name (any platform works)"},
+            "chat_id": {"type": "string", "description": "REQUIRED for notifications. Pass chat/channel ID from message context."},
         },
-        "required": ["sender_id", "channel"],
+        "required": ["sender_id", "channel", "chat_id"],
     },
 }
 
@@ -198,8 +205,9 @@ EVENT_CREATE_SCHEMA = {
             "og_image": {"type": "string", "description": "OG image URL for social sharing"},
             "requires_approval": {"type": "boolean", "description": "Require host approval to join (default false)"},
             "screening_questions": {"type": "array", "items": {"type": "string"}, "description": "Screening questions for applicants"},
+            "chat_id": {"type": "string", "description": "REQUIRED for notifications. Pass chat/channel ID from message context."},
         },
-        "required": ["name", "sender_id", "channel", "starts_at", "ends_at"],
+        "required": ["name", "sender_id", "channel", "starts_at", "ends_at", "chat_id"],
     },
 }
 
@@ -215,8 +223,9 @@ EVENT_JOIN_SCHEMA = {
             "lat": {"type": "number", "description": "Latitude (optional, for auto-checkin)"},
             "lng": {"type": "number", "description": "Longitude (optional, for auto-checkin)"},
             "application_context": {"type": "string", "description": "Application context from screening conversation"},
+            "chat_id": {"type": "string", "description": "REQUIRED for notifications. Pass chat/channel ID from message context."},
         },
-        "required": ["code", "sender_id", "channel"],
+        "required": ["code", "sender_id", "channel", "chat_id"],
     },
 }
 
@@ -229,8 +238,9 @@ EVENT_SCAN_SCHEMA = {
             "code": {"type": "string", "description": "Event code"},
             "sender_id": {"type": "string", "description": "The sender's user ID"},
             "channel": {"type": "string", "description": "Platform name (any platform works)"},
+            "chat_id": {"type": "string", "description": "REQUIRED for notifications. Pass chat/channel ID from message context."},
         },
-        "required": ["code", "sender_id", "channel"],
+        "required": ["code", "sender_id", "channel", "chat_id"],
     },
 }
 
@@ -243,8 +253,9 @@ EVENT_END_SCHEMA = {
             "code": {"type": "string", "description": "Event code"},
             "sender_id": {"type": "string", "description": "The sender's user ID"},
             "channel": {"type": "string", "description": "Platform name (any platform works)"},
+            "chat_id": {"type": "string", "description": "REQUIRED for notifications. Pass chat/channel ID from message context."},
         },
-        "required": ["code", "sender_id", "channel"],
+        "required": ["code", "sender_id", "channel", "chat_id"],
     },
 }
 
@@ -273,8 +284,9 @@ EVENT_CHECKIN_SCHEMA = {
             "channel": {"type": "string", "description": "Platform name (any platform works)"},
             "lat": {"type": "number", "description": "Latitude (optional)"},
             "lng": {"type": "number", "description": "Longitude (optional)"},
+            "chat_id": {"type": "string", "description": "REQUIRED for notifications. Pass chat/channel ID from message context."},
         },
-        "required": ["code", "sender_id", "channel"],
+        "required": ["code", "sender_id", "channel", "chat_id"],
     },
 }
 
@@ -296,7 +308,7 @@ EVENT_UPDATE_SCHEMA = {
             "starts_at": {"type": "string"},
             "ends_at": {"type": "string"},
         },
-        "required": ["code", "sender_id", "channel"],
+        "required": ["code", "sender_id", "channel", "chat_id"],
     },
 }
 
@@ -312,7 +324,7 @@ EVENT_APPROVE_SCHEMA = {
             "chat_id": {"type": "string", "description": "REQUIRED for notifications. Pass chat/channel ID from message context."},
             "ref": {"type": "string"},
         },
-        "required": ["code", "sender_id", "channel", "ref"],
+        "required": ["code", "sender_id", "channel", "ref", "chat_id"],
     },
 }
 
@@ -328,7 +340,7 @@ EVENT_REJECT_SCHEMA = {
             "chat_id": {"type": "string", "description": "REQUIRED for notifications. Pass chat/channel ID from message context."},
             "ref": {"type": "string"},
         },
-        "required": ["code", "sender_id", "channel", "ref"],
+        "required": ["code", "sender_id", "channel", "ref", "chat_id"],
     },
 }
 
@@ -344,6 +356,6 @@ EVENT_ADD_HOST_SCHEMA = {
             "chat_id": {"type": "string", "description": "REQUIRED for notifications. Pass chat/channel ID from message context."},
             "ref": {"type": "string"},
         },
-        "required": ["code", "sender_id", "channel", "ref"],
+        "required": ["code", "sender_id", "channel", "ref", "chat_id"],
     },
 }
