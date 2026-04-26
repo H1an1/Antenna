@@ -1006,7 +1006,7 @@ export default function register(api: any) {
       }));
 
       const incomingAccepts = rawIncoming.map((m: any, i: number) => ({
-        ref: String(i + 1),
+        ref: String(mutualMatches.length + i + 1),
         _device_id: m.target_id,
         name: m.name || "匿名",
         emoji: m.emoji || "👤",
@@ -1023,6 +1023,14 @@ export default function register(api: any) {
       if (mutualMatches.length > 0) messages.push(`${mutualMatches.length} 个双向匹配！可以交换联系方式了`);
       if (incomingAccepts.length > 0) messages.push(`${incomingAccepts.length} 个人想认识你，等你回应`);
       if (messages.length === 0) messages.push("你接受了一些匹配，但对方还没有回应。耐心等等 ⏳");
+
+      // Persist ref map so accept(ref) resolves correctly
+      const _refMap: Record<string, string> = {};
+      for (const m of mutualMatches) _refMap[m.ref] = m._device_id;
+      for (const m of incomingAccepts) _refMap[m.ref] = m._device_id;
+      if (deviceId && Object.keys(_refMap).length > 0) {
+        try { await supabase.rpc("save_scan_refs", { p_owner: deviceId, p_refs: _refMap }); } catch { /* best effort */ }
+      }
 
       return ok({
         mutual_matches: mutualMatches,
@@ -1181,11 +1189,10 @@ export default function register(api: any) {
             async (payload: any) => {
               try {
                 const targetDeviceId = payload.new?.device_id_b;
-                if (!targetDeviceId || !_knownDeviceIds.has(targetDeviceId)) return;
+                if (!targetDeviceId) return;
 
                 const key = `${payload.new.device_id_a}→${targetDeviceId}`;
                 if (_notifiedMatches.has(key)) return;
-                _notifiedMatches.add(key);
 
                 const parts = targetDeviceId.split(":");
                 if (parts.length < 2) return;
@@ -1210,11 +1217,13 @@ export default function register(api: any) {
                   notifyUser(channel, userId,
                     `[Antenna] 🎉 双向匹配！${emoji} ${name} 也接受了你！${contact}\n\n用 antenna_check_matches 查看详情。`,
                     logger);
+                  _notifiedMatches.add(key);
                   stopFollowUpCron(targetDeviceId, payload.new.device_id_a, logger);
                 } else {
                   notifyUser(channel, userId,
                     `[Antenna] 📩 ${emoji} ${name} 想认识你！看看 TA 的名片，决定要不要接受？\n\n用 antenna_check_matches 查看详情。`,
                     logger);
+                  _notifiedMatches.add(key);
                 }
               } catch (err: any) {
                 logger.warn("Antenna: realtime match handler error:", err.message);
@@ -1310,10 +1319,9 @@ export default function register(api: any) {
           const cfg = getConfig(api);
           const supabase = getSupabase(cfg);
 
-          // Get all profiles that have been active in last 24h
+          // Get all profiles with valid notification targets
           const { data: activeProfiles } = await supabase
-            .rpc("nearby_profiles", { p_lat: 0, p_lng: 0, p_radius_m: 999999999 })
-            .select("device_id");
+            .rpc("get_notification_targets", { p_since: "7 days" });
 
           if (!activeProfiles?.length) return;
 
@@ -1343,7 +1351,7 @@ export default function register(api: any) {
 
             for (const match of newMatches) {
               const notifyKey = `${match.device_id_a}→${match.device_id_b}`;
-              _notifiedMatches.add(notifyKey);
+              if (_notifiedMatches.has(notifyKey)) continue;
 
               // Is this a new mutual match?
               if (match.device_id_a === deviceId) {
@@ -1358,7 +1366,7 @@ export default function register(api: any) {
                     `[Antenna] 🎉 双向匹配成功！${emoji} ${name} 也接受了你！${contact}\n\n用 antenna_check_matches 查看详情。`,
                     logger,
                   );
-                  // Clean up follow-up crons
+                  _notifiedMatches.add(notifyKey);
                   stopFollowUpCron(deviceId, match.device_id_b, logger);
                 }
               } else if (match.device_id_b === deviceId) {
@@ -1368,21 +1376,21 @@ export default function register(api: any) {
                 const emoji = theirProfile?.emoji || "👤";
                 const iAccepted = myMatches.find((m: any) => m.device_id_b === match.device_id_a);
                 if (iAccepted) {
-                  // I already accepted them → mutual!
                   const contact = match.contact_info_a ? `\n对方的联系方式：${match.contact_info_a}` : "";
                   notifyUser(
                     channel, userId,
                     `[Antenna] 🎉 双向匹配成功！${emoji} ${name} 也接受了你！${contact}\n\n用 antenna_check_matches 查看详情。`,
                     logger,
                   );
+                  _notifiedMatches.add(notifyKey);
                   stopFollowUpCron(deviceId, match.device_id_a, logger);
                 } else {
-                  // They accepted me but I haven't responded
                   notifyUser(
                     channel, userId,
                     `[Antenna] 📩 ${emoji} ${name} 想认识你！看看 TA 的名片，决定要不要接受？\n\n用 antenna_check_matches 查看详情。`,
                     logger,
                   );
+                  _notifiedMatches.add(notifyKey);
                 }
               }
             }
@@ -1393,8 +1401,9 @@ export default function register(api: any) {
             }
           }
 
-          // ── Event approval polling ──
-          for (const deviceId of _knownDeviceIds) {
+          // ── Event approval polling (use notification targets, not _knownDeviceIds) ──
+          for (const profile of activeProfiles) {
+            const deviceId = profile.device_id;
             try {
               const { data: events } = await supabase.rpc("get_my_event_updates", { p_device_id: deviceId });
               if (!events?.length) continue;
@@ -1403,19 +1412,20 @@ export default function register(api: any) {
               const channel = parts[0];
               const userId = parts.slice(1).join(":");
               for (const ev of events) {
-                const key = `event:${ev.event_id}:${ev.status}`;
+                const key = `event:${deviceId}:${ev.event_id}:${ev.status}`;
                 if (_notifiedMatches.has(key)) continue;
-                _notifiedMatches.add(key);
-                if (ev.status === "active" && ev.role !== "creator" && ev.role !== "cohost") {
+                if (ev.status === "active" && ev.role !== "creator" && ev.role !== "cohost" && ev.requires_approval) {
                   notifyUser(channel, userId,
                     `[Antenna] ✅ 你的申请已通过！欢迎加入「${ev.event_name}」`,
                     logger,
                   );
+                  _notifiedMatches.add(key);
                 } else if (ev.status === "rejected") {
                   notifyUser(channel, userId,
                     `[Antenna] ❌ 你的申请未通过「${ev.event_name}」`,
                     logger,
                   );
+                  _notifiedMatches.add(key);
                 }
               }
             } catch { /* silent */ }

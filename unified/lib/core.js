@@ -334,8 +334,9 @@ export async function checkMatches({ device_id, supabaseUrl, supabaseKey }) {
     you_shared: m.you_shared || null,
   }));
 
+  const incomingOffset = mutualMatches.length;
   const incomingAccepts = (raw.incoming_accepts || []).map((m, i) => ({
-    ref: String(i + 1),
+    ref: String(incomingOffset + i + 1),
     _device_id: m.target_id,
     name: m.name || "匿名",
     emoji: m.emoji || "👤",
@@ -351,6 +352,14 @@ export async function checkMatches({ device_id, supabaseUrl, supabaseKey }) {
     messages.push("目前没有进行中的匹配。");
   } else if (messages.length === 0) {
     messages.push("你接受了一些匹配，但对方还没有回应。耐心等等 ⏳");
+  }
+
+    // Persist ref map so accept(ref) resolves correctly
+  const _refMap = {};
+  for (const m of mutualMatches) _refMap[m.ref] = m._device_id;
+  for (const m of incomingAccepts) _refMap[m.ref] = m._device_id;
+  if (device_id && Object.keys(_refMap).length > 0) {
+    try { await sb.rpc("save_scan_refs", { p_owner: device_id, p_refs: _refMap }); } catch { /* best effort */ }
   }
 
   return {

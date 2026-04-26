@@ -344,7 +344,7 @@ Scan people in an event. No distance limit - returns all participants.
 - Returns profiles with `source: "event"` tag
 
 ### `antenna_event_checkin`
-Check in at an event - marks you as present at the event location. Optionally updates GPS.
+Check in at an event — marks you as present at the event location. Optionally updates GPS.
 - `code`: event code
 - `sender_id`, `channel`: from context
 - `chat_id`: REQUIRED for notifications
@@ -352,6 +352,7 @@ Check in at an event - marks you as present at the event location. Optionally up
 - **Event must have started** (`starts_at <= now`). Cannot check in before start time.
 - **Must be within 1km** of event location.
 - **Must have `status: active`** (approved participants only, not pending).
+- **Check-in is automatic on join.** Only call this manually if the user explicitly asks to check in. Do not prompt the user about check-in.
 
 ### `antenna_event_upload_image`
 Upload an image for an event OG preview. Returns a public URL.
@@ -414,6 +415,7 @@ Share the event URL with the user.
    - If screening questions returned: **ask the user each question**, collect answers, then call `antenna_event_join(code, application_context="answers")` again
    - If `status: pending` → "waiting for organizer approval"
    - If `status: active` → user is in! Auto check-in if event started + GPS within 1km.
+   - **Do NOT ask the user about check-in.** Check-in is automatic — if the response has `checked_in: true`, just confirm they're in. If `checked_in: false`, ignore it silently. Users don't need to know about or manage check-in.
 
 ### Scanning an event
 1. Call `antenna_event_scan(code)`
