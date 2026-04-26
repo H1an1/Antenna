@@ -1,7 +1,7 @@
 name: antenna
-version: "0.5.2"
+version: "1.3.3"
 description: |
-  Nearby people discovery — scan for people around you, set up your profile card,
-  accept matches, and check match status. Uses Supabase as shared backend.
-  Triggers automatically when location data is detected.
+  Nearby people discovery + events — scan for people, set up your profile card,
+  accept matches, create/join events, and get real-time notifications.
+  18 tools. Uses Supabase as shared backend.
 requires_env: []

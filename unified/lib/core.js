@@ -469,8 +469,8 @@ export async function createEvent({ name, lat, lng, device_id, starts_at, ends_a
   const sb = getClient(supabaseUrl, supabaseKey);
   const { data, error } = await sb.rpc("create_event", {
     p_name: name,
-    p_lat: lat || null,
-    p_lng: lng || null,
+    p_lat: lat ?? null,
+    p_lng: lng ?? null,
     p_created_by: device_id || null,
     p_starts_at: starts_at || null,
     p_ends_at: ends_at || null,
@@ -631,7 +631,7 @@ export async function updateEvent({ code, device_id, name, description, og_image
   const { data, error } = await sb.rpc("update_event", {
     p_code: code, p_device_id: device_id,
     p_name: name || null, p_description: description || null,
-    p_og_image: og_image || null, p_lat: lat || null, p_lng: lng || null,
+    p_og_image: og_image || null, p_lat: lat ?? null, p_lng: lng ?? null,
     p_starts_at: starts_at || null, p_ends_at: ends_at || null,
   });
   if (error) throw new Error(error.message);

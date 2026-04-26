@@ -847,7 +847,7 @@ export async function handleWatch(f) {
         if (!notified.has(key)) {
           notified.add(key);
           saveNotified(notified);
-          if (ev.status === "active" && ev.role !== "creator" && ev.role !== "cohost") {
+          if (ev.status === "active" && ev.role !== "creator" && ev.role !== "cohost" && ev.requires_approval) {
             pushNotify(`✅ Your application to "${ev.event_name}" was approved! You're in.`);
           } else if (ev.status === "rejected") {
             pushNotify(`❌ Your application to "${ev.event_name}" was not approved.`);

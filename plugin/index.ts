@@ -700,8 +700,8 @@ export default function register(api: any) {
       const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
       const { data, error } = await supabase.rpc("create_event", {
         p_name: params.name,
-        p_lat: params.lat || null,
-        p_lng: params.lng || null,
+        p_lat: params.lat ?? null,
+        p_lng: params.lng ?? null,
         p_created_by: deviceId,
         p_starts_at: params.starts_at || null,
         p_ends_at: params.ends_at || null,
@@ -785,7 +785,7 @@ export default function register(api: any) {
         } catch {}
       }
 
-      const { data, error } = await supabase.rpc("join_event", { p_code: params.code, p_device_id: deviceId, p_lat: lat || null, p_lng: lng || null, p_application_context: params.application_context || null });
+      const { data, error } = await supabase.rpc("join_event", { p_code: params.code, p_device_id: deviceId, p_lat: lat ?? null, p_lng: lng ?? null, p_application_context: params.application_context || null });
       if (error) return ok({ error: error.message });
       if (!data?.joined) return ok(data);
 
@@ -1062,7 +1062,7 @@ export default function register(api: any) {
       const { data, error } = await supabase.rpc("update_event", {
         p_code: params.code, p_device_id: deviceId,
         p_name: params.name || null, p_description: params.description || null,
-        p_og_image: params.og_image || null, p_lat: params.lat || null, p_lng: params.lng || null,
+        p_og_image: params.og_image || null, p_lat: params.lat ?? null, p_lng: params.lng ?? null,
         p_starts_at: params.starts_at || null, p_ends_at: params.ends_at || null,
       });
       if (error) return ok({ error: error.message });
