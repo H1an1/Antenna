@@ -130,6 +130,13 @@ def handle_scan(params: dict) -> str:
             "distance_m": p.get("distance_m") or p.get("dist_meters"),
         })
 
+    # Persist refs to DB so accept works after restart
+    if did and _last_ref_map:
+        try:
+            sb.rpc("save_scan_refs", {"p_owner": did, "p_refs": _last_ref_map}).execute()
+        except Exception:
+            pass
+
     return _ok({
         "profiles": profiles,
         "count": len(others),
@@ -176,6 +183,14 @@ def handle_accept(params: dict) -> str:
     target = params.get("target_device_id")
     if ref and ref in _last_ref_map:
         target = _last_ref_map[ref]
+    if not target and ref:
+        # DB fallback
+        try:
+            rr = sb.rpc("resolve_ref", {"p_owner": did, "p_ref": ref}).execute()
+            if rr.data:
+                target = rr.data
+        except Exception:
+            pass
     if not target:
         return _ok({"error": "No target. Use 'ref' from scan results or 'target_device_id'."})
 
@@ -251,7 +266,7 @@ def handle_check_matches(params: dict) -> str:
     inc_only = []
     for i, m in enumerate(raw_incoming):
         inc_only.append({
-            "ref": str(i + 1),
+            "ref": str(len(mutual) + i + 1),
             "_device_id": m.get("target_id"),
             "name": m.get("name") or "匿名",
             "emoji": m.get("emoji") or "👤",
@@ -267,6 +282,19 @@ def handle_check_matches(params: dict) -> str:
         msgs.append(f"{len(inc_only)} 个人想认识你，等你回应")
     if not msgs:
         msgs.append("你接受了一些匹配，但对方还没有回应。耐心等等 ⏳")
+
+    # Persist refs so accept(ref) resolves correctly
+    global _last_ref_map
+    _last_ref_map = {}
+    for m in mutual:
+        _last_ref_map[m["ref"]] = m["_device_id"]
+    for m in inc_only:
+        _last_ref_map[m["ref"]] = m["_device_id"]
+    if did and _last_ref_map:
+        try:
+            sb.rpc("save_scan_refs", {"p_owner": did, "p_refs": _last_ref_map}).execute()
+        except Exception:
+            pass
 
     return _ok({
         "mutual_matches": mutual,
@@ -291,7 +319,7 @@ def handle_pass(params: dict) -> str:
         try:
             resp = sb.rpc("resolve_ref", {"p_owner": did, "p_ref": ref}).execute()
             if resp.data:
-                target = resp.data.get("target_device_id")
+                target = resp.data
         except Exception:
             pass
     if not target:
