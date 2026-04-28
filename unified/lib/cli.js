@@ -1,6 +1,6 @@
 // antenna CLI command handlers
 
-import { scan, getProfile, setProfile, accept, checkMatches, checkin, createBindToken, discover, createEvent, endEvent, eventCheckin, joinEvent, eventScan, pass as passUser, uploadEventImage, updateEvent, approveParticipant, rejectParticipant, addCohost, getClient } from "./core.js";
+import { scan, getProfile, setProfile, accept, checkMatches, checkin, createBindToken, discover, createEvent, endEvent, eventCheckin, joinEvent, eventScan, pass as passUser, uploadEventImage, updateEvent, approveParticipant, rejectParticipant, addCohost, sendEventMessage, getMyEventMessages, getClient } from "./core.js";
 import { createInterface } from "readline";
 import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync, unlinkSync, renameSync } from "fs";
 import path from "path";
@@ -273,13 +273,25 @@ export async function handleEvent(f) {
     return;
   }
 
+  if (f.message || f.msg) {
+    if (!f.code || !f.id || !(f.message || f.msg)) return console.error("Usage: antenna event --message 'Hello everyone' --code abc123 --id <platform>:<user_id> [--ref 1]");
+    const result = await sendEventMessage({ code: f.code, device_id: f.id, message: f.message || f.msg, target_ref: f.ref || undefined });
+    if (result.sent) {
+      console.log(`\n✅ Message sent${result.broadcast ? ' (broadcast to all)' : ''}\n`);
+    } else {
+      console.log(`\n❌ ${result.error}\n`);
+    }
+    return;
+  }
+
   console.log(`Usage:
   antenna event --create --name 'AI Meetup' --starts-at '...' --ends-at '...' [--id <platform>:<user_id>] [--lat 34.05 --lng -118.25] [--desc 'description'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2']
   antenna event --join --code abc123 --id <platform>:<user_id>
   antenna event --scan --code abc123 [--id <platform>:<user_id>]
   antenna event --checkin --code abc123 --id <platform>:<user_id> [--lat 34.05 --lng -118.24]
   antenna event --end --code abc123 --id <platform>:<user_id>
-  antenna event --upload-image --code abc123 --file /path/to/image.png`);
+  antenna event --upload-image --code abc123 --file /path/to/image.png
+  antenna event --message 'Hello everyone' --code abc123 --id <platform>:<user_id> [--ref 1]`);
 }
 
 export async function handleBind(f) {
@@ -852,6 +864,20 @@ export async function handleWatch(f) {
           } else if (ev.status === "rejected") {
             pushNotify(`❌ Your application to "${ev.event_name}" was not approved.`);
           }
+        }
+      }
+    } catch { /* silent */ }
+
+    // Poll event messages from hosts
+    try {
+      const { data: msgs } = await sb.rpc("get_my_event_messages", { p_device_id: id });
+      for (const msg of (msgs || [])) {
+        const key = `evtmsg:${msg.event_id}:${msg.created_at}`;
+        if (!notified.has(key)) {
+          notified.add(key);
+          saveNotified(notified);
+          const role = msg.sender_role === 'creator' ? '组织者' : '协办';
+          pushNotify(`📢 来自「${msg.event_name}」${role} ${msg.sender_emoji || ''} ${msg.sender_name}: ${msg.message}`);
         }
       }
     } catch { /* silent */ }

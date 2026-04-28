@@ -23,6 +23,7 @@ import {
   approveParticipant,
   rejectParticipant,
   addCohost,
+  sendEventMessage,
   deriveDeviceId,
 } from "./core.js";
 
@@ -473,6 +474,27 @@ export async function startMcpServer() {
     async ({ code, sender_id, channel, ref }) => {
       try {
         const result = await addCohost({ code, device_id: deriveDeviceId(sender_id, channel), ref });
+        return jsonResult(result);
+      } catch (e) { return jsonResult({ error: e.message }); }
+    }
+  );
+
+  // ─── antenna_event_message ────────────────────────────────
+
+  server.tool(
+    "antenna_event_message",
+    "Send a message to event participants. Only creator or co-host can send. Omit ref to broadcast to all.",
+    {
+      code: z.string().describe("Event code"),
+      sender_id: z.string().describe("The sender's user ID"),
+      channel: z.string().describe("Channel name"),
+      chat_id: z.string().describe("REQUIRED for notifications"),
+      message: z.string().describe("Message to send"),
+      ref: z.string().optional().describe("Ref number of specific participant (omit for broadcast)"),
+    },
+    async ({ code, sender_id, channel, chat_id, message, ref }) => {
+      try {
+        const result = await sendEventMessage({ code, device_id: deriveDeviceId(sender_id, channel), message, target_ref: ref });
         return jsonResult(result);
       } catch (e) { return jsonResult({ error: e.message }); }
     }

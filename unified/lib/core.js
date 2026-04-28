@@ -686,3 +686,30 @@ export async function createBindToken({ device_id, purpose, event_code, supabase
       : "发送这个链接给用户，在手机浏览器打开即可共享位置。",
   };
 }
+
+// ─── sendEventMessage (host → participants) ─────────────────────────
+
+export async function sendEventMessage({ code, device_id, message, target_ref, supabaseUrl, supabaseKey }) {
+  const sb = getClient(supabaseUrl, supabaseKey);
+  const params = {
+    p_code: code,
+    p_device_id: device_id,
+    p_message: message,
+  };
+  if (target_ref) params.p_target_ref = target_ref;
+  const { data, error } = await sb.rpc("send_event_message", params);
+  if (error) throw new Error(error.message);
+  return data;
+}
+
+// ─── getMyEventMessages ──────────────────────────────────────────────
+
+export async function getMyEventMessages({ device_id, supabaseUrl, supabaseKey }) {
+  const sb = getClient(supabaseUrl, supabaseKey);
+  const { data, error } = await sb.rpc("get_my_event_messages", { p_device_id: device_id });
+  if (error) throw new Error(error.message);
+  return {
+    messages: data || [],
+    count: (data || []).length,
+  };
+}

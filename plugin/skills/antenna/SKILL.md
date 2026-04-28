@@ -388,6 +388,16 @@ Add a co-host to the event. Only creator can add.
 - `chat_id`: REQUIRED for notifications
 - `ref`: participant ref number to promote to co-host
 
+### `antenna_event_message`
+Send a message to event participants. Only creator or co-host can send.
+- `code`: event code
+- `sender_id`, `channel`: from context
+- `chat_id`: REQUIRED for notifications
+- `message`: the message text
+- `ref`: optional — ref number of specific participant. Omit to broadcast to all active participants.
+- Use when the host needs to notify participants about logistics, changes, or requests (e.g. "please share your WeChat in your profile").
+- One-way: participants receive the message but cannot reply through this channel.
+
 ---
 
 ## Event Behavior Guide

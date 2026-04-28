@@ -1166,7 +1166,38 @@ export default function register(api: any) {
   });
 
   // ═══════════════════════════════════════════════════════════════════
-  // Service: poll for new matches every 10 minutes → notify instantly
+  // Tool: antenna_event_message
+  // ═══════════════════════════════════════════════════════════════════
+  api.registerTool({
+    name: "antenna_event_message",
+    description: "Send a message to event participants. Only creator or co-host can send. Omit ref to broadcast to all participants.",
+    parameters: {
+      type: "object",
+      properties: {
+        code: { type: "string", description: "Event code" },
+        sender_id: { type: "string" },
+        channel: { type: "string" },
+        chat_id: { type: "string", description: "REQUIRED for notifications. Pass the chat/channel ID from your message context so Antenna can send you match and event notifications." },
+        message: { type: "string", description: "Message to send to participants" },
+        ref: { type: "string", description: "Ref number of specific participant (omit to broadcast to all)" },
+      },
+      required: ["code", "sender_id", "channel", "message", "chat_id"],
+    },
+    async execute(_id: string, params: any) {
+      const cfg = getConfig(api);
+      const supabase = getSupabase(cfg);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
+      const { data, error } = await supabase.rpc("send_event_message", {
+        p_code: params.code,
+        p_device_id: deviceId,
+        p_message: params.message,
+        ...(params.ref ? { p_target_ref: params.ref } : {}),
+      });
+      if (error) return ok({ error: error.message });
+      return ok(data);
+    },
+  });
+
   // ═══════════════════════════════════════════════════════════════════
   const _notifiedMatches = new Set<string>(); // "deviceA→deviceB" already notified
 
@@ -1427,6 +1458,29 @@ export default function register(api: any) {
                   );
                   _notifiedMatches.add(key);
                 }
+              }
+            } catch { /* silent */ }
+          }
+
+          // ── Event messages polling ──
+          for (const profile of activeProfiles) {
+            const deviceId = profile.device_id;
+            try {
+              const { data: msgs } = await supabase.rpc("get_my_event_messages", { p_device_id: deviceId });
+              if (!msgs?.length) continue;
+              const parts = deviceId.split(":");
+              if (parts.length < 2) continue;
+              const channel = parts[0];
+              const userId = parts.slice(1).join(":");
+              for (const msg of msgs) {
+                const key = `evtmsg:${msg.event_id}:${msg.created_at}`;
+                if (_notifiedMatches.has(key)) continue;
+                const role = msg.sender_role === 'creator' ? '组织者' : '协办';
+                notifyUser(channel, userId,
+                  `[Antenna] 📢 来自「${msg.event_name}」${role} ${msg.sender_emoji || ''} ${msg.sender_name}: ${msg.message}`,
+                  logger,
+                );
+                _notifiedMatches.add(key);
               }
             } catch { /* silent */ }
           }

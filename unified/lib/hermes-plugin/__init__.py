@@ -32,6 +32,7 @@ from .tools import (
     handle_event_approve,
     handle_event_reject,
     handle_event_add_host,
+    handle_event_message,
     _sb,
     _device_id,
     _my_device_ids,
@@ -55,6 +56,7 @@ from .schemas import (
     EVENT_APPROVE_SCHEMA,
     EVENT_REJECT_SCHEMA,
     EVENT_ADD_HOST_SCHEMA,
+    EVENT_MESSAGE_SCHEMA,
 )
 import re
 import time
@@ -89,6 +91,7 @@ def register(ctx):
     ctx.register_tool("antenna_event_approve", EVENT_APPROVE_SCHEMA, handle_event_approve)
     ctx.register_tool("antenna_event_reject", EVENT_REJECT_SCHEMA, handle_event_reject)
     ctx.register_tool("antenna_event_add_host", EVENT_ADD_HOST_SCHEMA, handle_event_add_host)
+    ctx.register_tool("antenna_event_message", EVENT_MESSAGE_SCHEMA, handle_event_message)
 
     # ── Hook: auto-detect location + check web GPS events ─────────
     def on_pre_llm(messages, **kwargs):
@@ -179,6 +182,19 @@ def register(ctx):
                             hints.append(
                                 f"[Antenna] ❌ 你的申请未通过「{name}」"
                             )
+
+                    # Check event messages from hosts
+                    msg_resp = sb.rpc("get_my_event_messages", {"p_device_id": did}).execute()
+                    for msg in (msg_resp.data or []):
+                        key = f"evtmsg:{msg.get('event_id')}:{msg.get('created_at')}"
+                        if key in _notified_match_keys:
+                            continue
+                        _notified_match_keys.add(key)
+                        role_label = '组织者' if msg.get('sender_role') == 'creator' else '协办'
+                        hints.append(
+                            f"[Antenna] 📢 来自「{msg.get('event_name')}」{role_label} {msg.get('sender_emoji', '')} {msg.get('sender_name', '')}: {msg.get('message', '')}\n"
+                            f"请立即通知用户这条消息。"
+                        )
             except Exception:
                 pass
         now = time.time()

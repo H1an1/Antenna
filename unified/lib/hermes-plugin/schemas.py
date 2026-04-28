@@ -359,3 +359,20 @@ EVENT_ADD_HOST_SCHEMA = {
         "required": ["code", "sender_id", "channel", "ref", "chat_id"],
     },
 }
+
+EVENT_MESSAGE_SCHEMA = {
+    "name": "antenna_event_message",
+    "description": "Send a message to event participants. Only creator or co-host can send. Omit ref to broadcast to all.",
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "code": {"type": "string", "description": "Event code"},
+            "sender_id": {"type": "string"},
+            "channel": {"type": "string"},
+            "chat_id": {"type": "string", "description": "REQUIRED for notifications. Pass chat/channel ID from message context."},
+            "message": {"type": "string", "description": "Message to send to participants"},
+            "ref": {"type": "string", "description": "Ref number of specific participant (omit for broadcast)"},
+        },
+        "required": ["code", "sender_id", "channel", "message", "chat_id"],
+    },
+}

@@ -680,3 +680,18 @@ def handle_event_add_host(params: dict) -> str:
         "p_code": params["code"], "p_device_id": did, "p_target_ref": params["ref"],
     }).execute()
     return _ok(resp.data or {"error": "add_cohost failed"})
+
+
+def handle_event_message(params: dict) -> str:
+    """Send a message to event participants. Only creator or co-host can send."""
+    sb = _sb()
+    did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
+    rpc_params = {
+        "p_code": params["code"],
+        "p_device_id": did,
+        "p_message": params["message"],
+    }
+    if params.get("ref"):
+        rpc_params["p_target_ref"] = params["ref"]
+    resp = sb.rpc("send_event_message", rpc_params).execute()
+    return _ok(resp.data or {"error": "send_event_message failed"})
