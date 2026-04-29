@@ -1060,6 +1060,8 @@ export default function register(api: any) {
         lng: { type: "number", description: "New event longitude" },
         starts_at: { type: "string", description: "New start time ISO" },
         ends_at: { type: "string", description: "New end time ISO" },
+        requires_approval: { type: "boolean", description: "Require host approval to join" },
+        screening_questions: { type: "array", items: { type: "string" }, description: "Screening questions for applicants" },
       },
       required: ["code", "sender_id", "channel", "chat_id"],
     },
@@ -1072,6 +1074,8 @@ export default function register(api: any) {
         p_name: params.name || null, p_description: params.description || null,
         p_og_image: params.og_image || null, p_lat: params.lat ?? null, p_lng: params.lng ?? null,
         p_starts_at: params.starts_at || null, p_ends_at: params.ends_at || null,
+        ...(params.requires_approval != null ? { p_requires_approval: params.requires_approval } : {}),
+        ...(params.screening_questions != null ? { p_screening_questions: params.screening_questions } : {}),
       });
       if (error) return ok({ error: error.message });
       return ok(data);

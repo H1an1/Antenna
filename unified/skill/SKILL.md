@@ -366,6 +366,8 @@ Update event info. Only creator or co-host can update.
 - `sender_id`, `channel`: from context
 - `chat_id`: REQUIRED for notifications
 - `name`, `description`, `og_image`, `lat`, `lng`, `starts_at`, `ends_at`: all optional for update (only provided fields change, others stay as-is)
+- `requires_approval`: optional boolean — enable/disable approval requirement
+- `screening_questions`: optional string array — update screening questions
 
 ### `antenna_event_approve`
 Approve a pending participant. Only creator or co-host.

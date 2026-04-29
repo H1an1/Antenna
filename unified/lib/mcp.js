@@ -413,10 +413,12 @@ export async function startMcpServer() {
       lng: z.number().optional().describe("New event longitude"),
       starts_at: z.string().optional().describe("New start time ISO"),
       ends_at: z.string().optional().describe("New end time ISO"),
+      requires_approval: z.boolean().optional().describe("Require host approval to join"),
+      screening_questions: z.array(z.string()).optional().describe("Screening questions for applicants"),
     },
-    async ({ code, sender_id, channel, name, description, og_image, lat, lng, starts_at, ends_at }) => {
+    async ({ code, sender_id, channel, name, description, og_image, lat, lng, starts_at, ends_at, requires_approval, screening_questions }) => {
       try {
-        const result = await updateEvent({ code, device_id: deriveDeviceId(sender_id, channel), name, description, og_image, lat, lng, starts_at, ends_at });
+        const result = await updateEvent({ code, device_id: deriveDeviceId(sender_id, channel), name, description, og_image, lat, lng, starts_at, ends_at, requires_approval, screening_questions });
         return jsonResult(result);
       } catch (e) { return jsonResult({ error: e.message }); }
     }

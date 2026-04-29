@@ -307,6 +307,8 @@ EVENT_UPDATE_SCHEMA = {
             "lng": {"type": "number"},
             "starts_at": {"type": "string"},
             "ends_at": {"type": "string"},
+            "requires_approval": {"type": "boolean", "description": "Require host approval to join"},
+            "screening_questions": {"type": "array", "items": {"type": "string"}, "description": "Screening questions for applicants"},
         },
         "required": ["code", "sender_id", "channel", "chat_id"],
     },

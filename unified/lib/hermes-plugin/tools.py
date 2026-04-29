@@ -645,13 +645,18 @@ def handle_event_checkin(params: dict) -> str:
 def handle_event_update(params: dict) -> str:
     sb = _sb()
     did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
-    resp = sb.rpc("update_event", {
+    rpc_params = {
         "p_code": params["code"], "p_device_id": did,
         "p_name": params.get("name"), "p_description": params.get("description"),
         "p_og_image": params.get("og_image"), "p_lat": params.get("lat"),
         "p_lng": params.get("lng"), "p_starts_at": params.get("starts_at"),
         "p_ends_at": params.get("ends_at"),
-    }).execute()
+    }
+    if params.get("requires_approval") is not None:
+        rpc_params["p_requires_approval"] = params["requires_approval"]
+    if params.get("screening_questions") is not None:
+        rpc_params["p_screening_questions"] = params["screening_questions"]
+    resp = sb.rpc("update_event", rpc_params).execute()
     return _ok(resp.data or {"error": "update failed"})
 
 

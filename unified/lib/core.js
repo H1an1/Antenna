@@ -635,13 +635,15 @@ export async function getEvent({ code, supabaseUrl, supabaseKey }) {
   return data;
 }
 
-export async function updateEvent({ code, device_id, name, description, og_image, lat, lng, starts_at, ends_at, supabaseUrl, supabaseKey }) {
+export async function updateEvent({ code, device_id, name, description, og_image, lat, lng, starts_at, ends_at, requires_approval, screening_questions, supabaseUrl, supabaseKey }) {
   const sb = getClient(supabaseUrl, supabaseKey);
   const { data, error } = await sb.rpc("update_event", {
     p_code: code, p_device_id: device_id,
     p_name: name || null, p_description: description || null,
     p_og_image: og_image || null, p_lat: lat ?? null, p_lng: lng ?? null,
     p_starts_at: starts_at || null, p_ends_at: ends_at || null,
+    ...(requires_approval != null ? { p_requires_approval: requires_approval } : {}),
+    ...(screening_questions != null ? { p_screening_questions: screening_questions } : {}),
   });
   if (error) throw new Error(error.message);
   return data;
