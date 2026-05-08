@@ -54,7 +54,7 @@ function getConfig(api: any): AntennaConfig {
     supabaseUrl: cfg.supabaseUrl || BUILTIN_SUPABASE_URL,
     supabaseKey: cfg.supabaseKey || BUILTIN_SUPABASE_ANON_KEY,
     defaultRadiusM: cfg.defaultRadiusM ?? 500,
-    matchExpiryHours: cfg.matchExpiryHours ?? 24,
+    matchExpiryHours: cfg.matchExpiryHours ?? 168,
     maxMatches: cfg.maxMatches ?? 5,
     autoScanOnLocation: cfg.autoScanOnLocation ?? true,
   };

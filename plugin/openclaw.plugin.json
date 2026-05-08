@@ -23,8 +23,8 @@
       },
       "matchExpiryHours": {
         "type": "number",
-        "description": "Hours before a match expires",
-        "default": 24
+        "description": "Hours before match visibility decays (time decay model)",
+        "default": 168
       },
       "maxMatches": {
         "type": "number",
