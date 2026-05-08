@@ -7,6 +7,100 @@ Versioning: Plugin / CLI / MCP 分开标版本号。
 
 ---
 
+## [v1.3.8] — 2026-05-08
+
+### Added
+- **event_update** 支持 `requires_approval` + `screening_questions` 字段
+
+## [v1.3.7] — 2026-05-07
+
+### Added
+- **antenna_event_message** — 主办方向参与者发消息
+
+## [v1.3.6] — 2026-05-06
+
+### Fixed
+- Hermes Plugin ref parity — offset + save_scan_refs + accept/pass DB fallback
+
+## [v1.3.5] — 2026-05-05
+
+### Fixed
+- ref collision 修复 + OC Plugin 通知系统重写
+
+## [v1.3.4] — 2026-05-04
+
+### Added
+- **auto-embed on upsert_profile** — RPC → pg_net → generate-embedding，profile 保存后自动生成 embedding
+
+## [v1.3.3] — 2026-05-03
+
+### Fixed
+- Gemini embedding 修复 + SKILL.md onboarding 重写 + poll notification 修复
+
+## [v1.3.2] — 2026-05-02
+
+### Fixed
+- 13 个 review issues — parity, security, agent-native, RPC params
+
+## [v1.3.1] — 2026-05-01
+
+### Changed
+- Agent-native audit — 去掉真实用户 ID、平台特定示例、HP check_matches 隐私、channel descriptions、重复 globals
+
+## [v1.3.0] — 2026-04-30
+
+### Added
+- **Make Events Complete** — 活动审批、co-hosts、通知系统、安全加固、agent-native audit
+
+## [v1.2.32–v1.2.42] — 2026-04-15 ~ 2026-04-29
+
+### Added
+- SKILL.md agent-native self-check — 消除歧义，添加显式信号
+- `created_by` required on create_event
+- webhook deliver-only push, install-hermes auto-config
+- Hermes event poll + PID file cross-version dedup
+- Event approval poll fallback + `get_my_event_updates` RPC
+- Hermes Realtime listener thread + pending scan gate + discover quality filter
+- Watch realtime event notifications + pushNotify fix
+- `chat_id` on all tools + persist to DB for notifications
+
+### Fixed
+- Event notification dedup, schema parity, scan upsert cleanup
+- Push both openclaw+hermes, not either/or
+- P0 privacy fixes, P1 reliability, P2 scan/matches perf
+- Watch log file + stdout blocking + status health check
+
+---
+
+## [Website] — 2026-04-15 ~ 2026-05-09
+
+### Added
+- **Dashboard (/me)** — 用户注册 + 登录 + profile 编辑 + API key 管理
+- **Public profile (/p/[slug])** — 公开身份卡，agent-native 介绍页
+- **Auth system** — Email OTP 验证码登录 + Google OAuth
+- **Archetype matching** — 希腊神话原型分配 + profile card 正反翻转
+- **Hero 改版** — video gallery frame + "Your agent finds your people" tagline
+- **Promo page** — Hyperframes 宣传视频页面
+- **EngravedPanel 组件** — 统一 dashboard 和 profile 的 UI 面板
+- **Social link icons** — GitHub, X, Instagram, LinkedIn, Telegram 等
+- **Favicon 更新** — 新 brand/antenna.svg
+- **Deep Context 特性卡** — 新增 feature grid 第 7 张卡片
+
+### Changed
+- **Features copy 全面更新** — 去掉 24h 过期描述、GPS 精度描述；"Zero Config" → "One API Key"；HOW section 改为 signup 流程；Event Mode 加入时间衰减 + trust model
+- **Login 改为 Email OTP** — 从 magic link 改为验证码
+- Dashboard 拆分为 ProfileCard / ProfileEditor / ApiKeyModal / TodaySection 组件
+
+### Fixed
+- **Profile 保存失败** — profiles 表 RLS 开启但无 policy，dashboard 写入被默默拒绝
+  - 新增 `save_user_profile` RPC (SECURITY DEFINER) 处理首次创建/绑定
+  - 新增 RLS policies: own_profile_select, own_profile_update, public_visible_select
+  - Dashboard 首次保存走 RPC，后续编辑走 RLS 直接更新
+- Auth callback error/timeout handling
+- Dashboard RPC errors + revoke confirm
+
+---
+
 ## [Plugin 0.5.0 / CLI 0.2.0 / MCP 0.2.0] — 2026-04-02
 
 ### Added

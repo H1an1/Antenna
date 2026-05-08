@@ -132,6 +132,8 @@ export async function scan({ lat, lng, radius_m = 500, device_id, supabaseUrl, s
     if (globalOthers.length > 0) {
       const profs = buildProfiles(globalOthers);
       await saveRefs(_refMap);
+      // Log global fallback scan
+      try { await sb.rpc("log_scan", { p_device_id: device_id, p_lat: lat ?? null, p_lng: lng ?? null, p_radius_m: radius_m, p_results_count: globalOthers.length, p_global_fallback: true }); } catch {}
       return {
         count: globalOthers.length,
         radius_m,
@@ -161,6 +163,14 @@ export async function scan({ lat, lng, radius_m = 500, device_id, supabaseUrl, s
       nearby_events = evts || [];
     } catch { /* best effort */ }
   }
+
+  // Log scan event (analytics, best-effort)
+  try {
+    await sb.rpc("log_scan", {
+      p_device_id: device_id, p_lat: lat ?? null, p_lng: lng ?? null,
+      p_radius_m: radius_m, p_results_count: others.length, p_global_fallback: false,
+    });
+  } catch { /* silent */ }
 
   return {
     count: others.length,
@@ -257,7 +267,7 @@ export async function accept({
     p_score: 0,
     p_status: "accepted",
     p_contact_info: contact_info || null,
-    p_expires_hours: 24,
+    p_expires_hours: 168,
   });
   if (error) throw new Error(error.message);
 
