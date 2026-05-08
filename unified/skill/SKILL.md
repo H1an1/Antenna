@@ -18,10 +18,12 @@ You have access to Antenna for location-based social discovery.
 
 Plugin 安装后,agent 应该**主动**开始引导,不要等用户问"怎么用"。
 
+**前置条件:** 用户需要先在 antenna.fyi 注册账号,从 Dashboard (antenna.fyi/me) 获取 API key,然后把 key 交给 agent。如果用户还没注册,引导他们去 antenna.fyi 注册。
+
 ### 流程
 
 **第一步:打招呼 + 解释**
-> "嘿,你装了 Antenna--它能帮你发现附近有意思的人。我先帮你做张名片,然后你发个位置给我,我看看附近有谁。"
+> "嘿,你装了 Antenna--它能帮你发现附近有意思的人。先确认一下,你在 antenna.fyi 注册过了吗?拿到 API key 了吗?有了的话我帮你做张名片,然后看看附近有谁。"
 
 **第二步:聊天收集 → 生成名片 → 确认**
 
@@ -43,7 +45,15 @@ Agent 跟用户聊几句,了解他们是谁、做什么、对什么感兴趣、�
 
 **不要跳过确认。名片是展示给别人看的,必须让用户看过才存。**
 
-**第三步:名片存好后,立刻调 antenna_bind**
+**第二步半:名片存好后,立刻推荐 2-3 个匹配的人**
+
+名片保存成功后,**立刻**调 `antenna_discover` 获取 2-3 个全球推荐,让用户马上看到 Antenna 的价值:
+> "名片存好了!我先帮你看看有谁跟你特别像——"
+> (展示 2-3 个推荐 + 个性化匹配理由)
+
+这一步让用户立刻体验到产品价值,不要跳过。
+
+**第三步:推荐完后,立刻调 antenna_bind**
 
 **这一步是强制的。** 名片保存成功后,你**必须立刻**调用 `antenna_bind` 生成链接并发给用户。不要问用户要不要,不要等用户说什么,直接调。
 
@@ -125,7 +135,7 @@ Scan for nearby people **and events**. Returns raw profile cards + active events
 
 **Profile GPS** - the user's location ("where am I")
 - Updated via `antenna_bind(purpose="profile")` or `antenna_checkin`
-- Fuzzy-hashed to ~150m for privacy
+- Location is never stored raw
 - Used for: `antenna_scan` (nearby people/events), `antenna_event_checkin` (distance check)
 - Has `last_seen_at` timestamp. **Expires conceptually after 2h** - agent should prompt refresh
 
@@ -207,7 +217,7 @@ Check in at a location - update your position so others can find you when they s
 Antenna only communicates with Supabase (bcudjloikmpcqwcptuyd.supabase.co) via HTTPS.
 
 **Data sent:**
-- Fuzzy GPS coordinates (rounded to ~150m precision)
+- GPS coordinates (never stored raw — location is processed server-side)
 - Your three-line profile card (text you wrote yourself)
 - Match status (accept/skip)
 - Contact info you choose to share
@@ -219,7 +229,7 @@ Antenna only communicates with Supabase (bcudjloikmpcqwcptuyd.supabase.co) via H
 - Anything not listed above
 
 All data is transmitted over HTTPS and stored in Supabase (Tokyo region).
-Matches expire after 7 days. GPS is blurred client-side before transmission.
+Visibility is controlled by time decay — recent event participants are fully visible, older connections gradually fade.
 Source code is open: https://github.com/H1an1/Antenna
 
 ## Behavior guidelines
@@ -288,12 +298,16 @@ Use `antenna_check_matches` when:
 - Never share someone's platform or username with another user
 - Only show the profile info (name, emoji, three lines)
 - Contact info is only shared when the user explicitly agrees
-- Matches expire in 7 days
+- Location is never stored raw
 
-### 7-day rule
-- Match results expire in 7 days
-- Contact info shared through matches expires with the match
-- If neither side acts within 7 days, the match disappears
+### Time Decay — 可见性随时间衰减
+
+Profiles 是永久的,但可见性随时间衰减:
+- **Event 后 0-7 天:** 全部参与者互相可见
+- **7-30 天:** 只有互相 scan 过 / 有共同活动的人可见
+- **30 天后:** 需要新事件重新激活
+
+事件(Event)是最强的信任信号——"同一个活动"比"附近"更有意义。
 
 ### Heartbeat - 自动查匹配
 
