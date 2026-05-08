@@ -195,7 +195,7 @@ export async function getProfile({ device_id, supabaseUrl, supabaseKey }) {
 export async function setProfile({
   device_id,
   display_name,
-  emoji = "👤",
+  emoji,
   line1,
   line2,
   line3,
@@ -208,7 +208,7 @@ export async function setProfile({
   const { data, error } = await sb.rpc("upsert_profile", {
     p_device_id: device_id,
     p_display_name: display_name || null,
-    p_emoji: emoji,
+    p_emoji: emoji || null,
     p_line1: line1 || null,
     p_line2: line2 || null,
     p_line3: line3 || null,

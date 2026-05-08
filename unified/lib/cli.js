@@ -67,15 +67,14 @@ export async function handleProfile(f) {
   if (!f.id) return console.error("Usage: antenna profile --id <platform>:<user_id> [--name Yi --emoji 🦦 --line1 '...' --line2 '...' --line3 '...']");
   if (f.name || f.line1 || f.line2 || f.line3 || f.visible !== undefined || f.hide !== undefined) {
     const visible = f.hide ? false : (f.visible !== undefined ? f.visible === 'true' || f.visible === true : undefined);
-    const data = await setProfile({
-      device_id: f.id,
-      display_name: f.name,
-      emoji: f.emoji || "👤",
-      line1: f.line1,
-      line2: f.line2,
-      line3: f.line3,
-      ...(visible !== undefined && { visible }),
-    });
+    const payload = { device_id: f.id };
+    if (f.name) payload.display_name = f.name;
+    if (f.emoji) payload.emoji = f.emoji;
+    if (f.line1 !== undefined) payload.line1 = f.line1;
+    if (f.line2 !== undefined) payload.line2 = f.line2;
+    if (f.line3 !== undefined) payload.line3 = f.line3;
+    if (visible !== undefined) payload.visible = visible;
+    const data = await setProfile(payload);
     console.log("✅ Profile saved");
     console.log(JSON.stringify(data, null, 2));
   } else {
