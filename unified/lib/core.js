@@ -188,7 +188,7 @@ export const PROFILE_FIELDS = {
   personal_description: { label: "个人描述", description: "Who you are and what you do", maxLength: 220, required: true },
   looking_for: { label: "想认识的人", description: "The kind of people you want to meet", maxLength: 140 },
   conversation_style: { label: "想要的交流方式", description: "The type of conversations you want", maxLength: 160 },
-  matching_context: { label: "匹配上下文", description: "Agent-generated rich context for better matching (not shown to others)", maxLength: 1000 },
+  more_information: { label: "更多信息", description: "Agent-generated rich context for better matching (not shown to others)", maxLength: 1000 },
   interest_tags: { label: "兴趣标签", description: "Interest/topic tags shown on the card (up to 8)", maxItems: 8 },
   city: { label: "国家/地区", description: "Country or region" },
   links: { label: "社交链接", description: "Social links shown on the card footer (up to 3)", maxItems: 3 },

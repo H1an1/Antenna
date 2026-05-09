@@ -88,7 +88,7 @@ export async function handleProfile(f) {
     if (data.conversation_style) console.log(`  Conversation: ${data.conversation_style}`);
     if (data.interest_tags?.length) console.log(`  Tags: ${data.interest_tags.join(", ")}`);
     if (data.city) console.log(`  📍 ${data.city}`);
-    if (data.context) console.log(`  More info: ${data.context}`);
+    if (data.context) console.log(`  More information: ${data.context}`);
   }
 }
 
