@@ -67,7 +67,7 @@ export async function handleScan(f) {
 export async function handleProfile(f) {
   const id = resolveId(f);
   if (!id) return console.error("Usage: antenna profile --id <platform>:<user_id> [--name Yi --emoji 🦦 --personal-description '...' --looking-for '...' --conversation-style '...'].']");
-  if (f.name || f["personal-description"] || f["looking-for"] || f["conversation-style"] || f.visible !== undefined || f.hide !== undefined) {
+  if (f.name || f["personal-description"] || f["looking-for"] || f["conversation-style"] || f["more-information"] || f.visible !== undefined || f.hide !== undefined) {
     const visible = f.hide ? false : (f.visible !== undefined ? f.visible === 'true' || f.visible === true : undefined);
     const payload = { device_id: id };
     if (f.name) payload.display_name = f.name;
@@ -75,6 +75,7 @@ export async function handleProfile(f) {
     if (f["personal-description"] !== undefined) payload.line1 = f["personal-description"];
     if (f["looking-for"] !== undefined) payload.line2 = f["looking-for"];
     if (f["conversation-style"] !== undefined) payload.line3 = f["conversation-style"];
+    if (f["more-information"] !== undefined) payload.matching_context = f["more-information"];
     if (visible !== undefined) payload.visible = visible;
     const data = await setProfile(payload);
     console.log("✅ Profile saved");

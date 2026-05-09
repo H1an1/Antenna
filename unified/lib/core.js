@@ -248,19 +248,24 @@ export async function setProfile({
 
   // Pack structured fields into matching_context JSON
   let contextJson = matching_context;
-  if (interest_tags || city || links || is_active !== undefined || archetype_override !== undefined) {
+  if (matching_context || interest_tags || city || links || is_active !== undefined || archetype_override !== undefined) {
+    // Read existing context from DB to merge
     let existing = {};
-    // If matching_context is already JSON, parse and merge
+    try {
+      const current = await getProfile({ device_id, supabaseUrl, supabaseKey });
+      if (current?.matching_context) {
+        try { existing = JSON.parse(current.matching_context); } catch { existing = {}; }
+      }
+    } catch {}
+
+    // If matching_context is a plain string (not JSON), treat it as the "context" field
     if (matching_context) {
-      try { existing = JSON.parse(matching_context); } catch { existing = { context: matching_context }; }
-    } else {
-      // Read existing matching_context from DB to merge
       try {
-        const current = await getProfile({ device_id, supabaseUrl, supabaseKey });
-        if (current?.matching_context) {
-          try { existing = JSON.parse(current.matching_context); } catch { existing = {}; }
-        }
-      } catch {}
+        const parsed = JSON.parse(matching_context);
+        Object.assign(existing, parsed);
+      } catch {
+        existing.context = matching_context;
+      }
     }
     if (interest_tags) existing.interestTags = interest_tags;
     if (city) existing.city = city;
