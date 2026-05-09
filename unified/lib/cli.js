@@ -47,9 +47,9 @@ export async function handleScan(f) {
   }
   result.profiles.forEach((p) => {
     console.log(`  ${p.emoji} ${p.name}${p.distance_m != null ? ` (${Math.round(p.distance_m)}m)` : ""}`);
-    if (p.line1) console.log(`    ${p.line1}`);
-    if (p.line2) console.log(`    ${p.line2}`);
-    if (p.line3) console.log(`    ${p.line3}`);
+    if (p.personal_description) console.log(`    ${p.personal_description}`);
+    if (p.looking_for) console.log(`    ${p.looking_for}`);
+    if (p.conversation_style) console.log(`    ${p.conversation_style}`);
     console.log(`    ref: ${p.ref}\n`);
   });
 
@@ -81,11 +81,14 @@ export async function handleProfile(f) {
     console.log(JSON.stringify(data, null, 2));
   } else {
     const data = await getProfile({ device_id: id });
-    if (!data) return console.log("No profile yet. Create one with --name and --line1/2/3");
+    if (!data) return console.log("No profile yet. Create one with --name and --personal-description");
     console.log(`${data.emoji || "👤"} ${data.display_name || "Anonymous"}`);
-    if (data.line1) console.log(`  ${data.line1}`);
-    if (data.line2) console.log(`  ${data.line2}`);
-    if (data.line3) console.log(`  ${data.line3}`);
+    if (data.personal_description) console.log(`  ${data.personal_description}`);
+    if (data.looking_for) console.log(`  Looking for: ${data.looking_for}`);
+    if (data.conversation_style) console.log(`  Conversation: ${data.conversation_style}`);
+    if (data.interest_tags?.length) console.log(`  Tags: ${data.interest_tags.join(", ")}`);
+    if (data.city) console.log(`  📍 ${data.city}`);
+    if (data.context) console.log(`  More info: ${data.context}`);
   }
 }
 
@@ -128,7 +131,7 @@ export async function handleMatches(f) {
   }
   for (const m of result.incoming_accepts) {
     console.log(`📩 WANTS TO MEET YOU: ${m.emoji} ${m.name}`);
-    if (m.line1) console.log(`   ${m.line1}`);
+    if (m.personal_description) console.log(`   ${m.personal_description}`);
     console.log(`   Accept: antenna accept --id ${f.id} --ref ${m.ref}`);
     console.log();
   }
@@ -142,9 +145,9 @@ export async function handleDiscover(f) {
   console.log(`🌍 Global discover:\n`);
   result.profiles.forEach((p) => {
     console.log(`  ${p.emoji} ${p.name}`);
-    if (p.line1) console.log(`    ${p.line1}`);
-    if (p.line2) console.log(`    ${p.line2}`);
-    if (p.line3) console.log(`    ${p.line3}`);
+    if (p.personal_description) console.log(`    ${p.personal_description}`);
+    if (p.looking_for) console.log(`    ${p.looking_for}`);
+    if (p.conversation_style) console.log(`    ${p.conversation_style}`);
     if (p.match_reason) console.log(`    → ${p.match_reason}`);
     console.log(`    ref: ${p.ref}\n`);
   });
@@ -229,7 +232,7 @@ export async function handleEvent(f) {
       const creatorTag = p.role === "creator" ? " [主办]" : "";
       const statusTag = p.status === "pending" ? " 🟡待审批" : "";
       console.log(`  ${p.emoji} ${p.name}${creatorTag}${badge}${statusTag}`);
-      if (p.line1) console.log(`    ${p.line1}`);
+      if (p.personal_description) console.log(`    ${p.personal_description}`);
       if (p.application_context) console.log(`    📝 ${p.application_context}`);
       console.log(`    ref: ${p.ref}\n`);
     });
@@ -763,7 +766,7 @@ export async function handleWatch(f) {
     for (const m of initial.incoming_accepts) {
       const key = `incoming:${m._device_id}`;
       notified.add(key);
-      _log(`   ${m.emoji || "👤"} ${m.name} — ${m.line1 || ""}`);
+      _log(`   ${m.emoji || "👤"} ${m.name} — ${m.personal_description || ""}`);
     }
     saveNotified(notified);
     _log("");

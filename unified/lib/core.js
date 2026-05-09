@@ -215,6 +215,12 @@ export async function getProfile({ device_id, supabaseUrl, supabaseKey }) {
       data.context = ctx.context || null;
     } catch {}
   }
+
+  // Add semantic field aliases
+  data.personal_description = data.line1 || null;
+  data.looking_for = data.line2 || null;
+  data.conversation_style = data.line3 || null;
+
   return data;
 }
 
