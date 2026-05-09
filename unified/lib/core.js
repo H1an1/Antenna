@@ -189,6 +189,10 @@ export const PROFILE_FIELDS = {
   line2: { label: "想认识的人", description: "The kind of people you want to meet", maxLength: 140 },
   line3: { label: "想要的交流方式", description: "The type of conversations you want", maxLength: 160 },
   matching_context: { label: "匹配上下文", description: "Agent-generated rich context for better matching (not shown to others)", maxLength: 1000 },
+  interest_tags: { label: "兴趣标签", description: "Interest/topic tags shown on the card (up to 8)", maxItems: 8 },
+  city: { label: "国家/地区", description: "Country or region" },
+  links: { label: "社交链接", description: "Social links shown on the card footer (up to 3)", maxItems: 3 },
+  is_active: { label: "状态", description: "Whether the profile is active or quiet" },
 };
 
 // ─── getProfile ──────────────────────────────────────────────────────
@@ -197,7 +201,21 @@ export async function getProfile({ device_id, supabaseUrl, supabaseKey }) {
   const sb = getClient(supabaseUrl, supabaseKey);
   const { data, error } = await sb.rpc("get_profile", { p_device_id: device_id });
   if (error) throw new Error(error.message);
-  return data || null;
+  if (!data) return null;
+
+  // Unpack matching_context JSON into top-level fields for easier agent consumption
+  if (data.matching_context) {
+    try {
+      const ctx = JSON.parse(data.matching_context);
+      data.interest_tags = ctx.interestTags || [];
+      data.city = ctx.city || null;
+      data.links = ctx.links || [];
+      data.is_active = typeof ctx.isActive === "boolean" ? ctx.isActive : true;
+      data.archetype_override = ctx.archetypeOverride || null;
+      data.context = ctx.context || null;
+    } catch {}
+  }
+  return data;
 }
 
 // ─── setProfile ──────────────────────────────────────────────────────
@@ -211,10 +229,42 @@ export async function setProfile({
   line3,
   matching_context,
   visible = true,
+  interest_tags,
+  city,
+  links,
+  profile_slug,
+  is_active,
+  archetype_override,
   supabaseUrl,
   supabaseKey,
 }) {
   const sb = getClient(supabaseUrl, supabaseKey);
+
+  // Pack structured fields into matching_context JSON
+  let contextJson = matching_context;
+  if (interest_tags || city || links || is_active !== undefined || archetype_override !== undefined) {
+    let existing = {};
+    // If matching_context is already JSON, parse and merge
+    if (matching_context) {
+      try { existing = JSON.parse(matching_context); } catch { existing = { context: matching_context }; }
+    } else {
+      // Read existing matching_context from DB to merge
+      try {
+        const current = await getProfile({ device_id, supabaseUrl, supabaseKey });
+        if (current?.matching_context) {
+          try { existing = JSON.parse(current.matching_context); } catch { existing = {}; }
+        }
+      } catch {}
+    }
+    if (interest_tags) existing.interestTags = interest_tags;
+    if (city) existing.city = city;
+    if (links) existing.links = links;
+    if (is_active !== undefined) existing.isActive = is_active;
+    if (archetype_override !== undefined) existing.archetypeOverride = archetype_override;
+    existing.version = existing.version || 1;
+    contextJson = JSON.stringify(existing);
+  }
+
   const { data, error } = await sb.rpc("upsert_profile", {
     p_device_id: device_id,
     p_display_name: display_name || null,
@@ -223,7 +273,7 @@ export async function setProfile({
     p_line2: line2 || null,
     p_line3: line3 || null,
     p_visible: visible,
-    p_matching_context: matching_context || null,
+    p_matching_context: contextJson || null,
   });
   if (error) throw new Error(error.message);
 
