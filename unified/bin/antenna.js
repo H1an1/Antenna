@@ -13,6 +13,7 @@ import {
   handlePass,
   handleWatch,
   handleSetup,
+  handleConfig,
   handleStatus,
   handleInstallSkill,
   handleInstallPlugin,
@@ -51,6 +52,8 @@ async function main() {
     }
     case "setup":
       return handleSetup(f);
+    case "config":
+      return handleConfig(f);
     case "status":
       return handleStatus(f);
     case "install-skill":

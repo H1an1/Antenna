@@ -1,6 +1,6 @@
 // antenna CLI command handlers
 
-import { scan, getProfile, setProfile, accept, checkMatches, checkin, createBindToken, discover, createEvent, endEvent, eventCheckin, joinEvent, eventScan, pass as passUser, uploadEventImage, updateEvent, approveParticipant, rejectParticipant, addCohost, sendEventMessage, getMyEventMessages, getClient } from "./core.js";
+import { scan, getProfile, setProfile, accept, checkMatches, checkin, createBindToken, discover, createEvent, endEvent, eventCheckin, joinEvent, eventScan, pass as passUser, uploadEventImage, updateEvent, approveParticipant, rejectParticipant, addCohost, sendEventMessage, getMyEventMessages, getClient, verifyApiKey } from "./core.js";
 import { createInterface } from "readline";
 import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync, unlinkSync, renameSync } from "fs";
 import path from "path";
@@ -31,12 +31,13 @@ export function parseFlags(args) {
 }
 
 export async function handleScan(f) {
-  if (!f.lat && !f.lng && !f.id) return console.error("Usage: antenna scan --lat 39.99 --lng 116.48 [--radius 500] (max 1000) [--id <platform>:<user_id>]\n  Or just: antenna scan --id <platform>:<user_id> (uses saved location from GPS bind)");
+  const _scanId = resolveId(f);
+  if (!f.lat && !f.lng && !_scanId) return console.error("Usage: antenna scan --lat 39.99 --lng 116.48 [--radius 500] (max 1000) [--id <platform>:<user_id>]\n  Or just: antenna scan --id <platform>:<user_id> (uses saved location from GPS bind)");
   const result = await scan({
     lat: f.lat ? +f.lat : undefined,
     lng: f.lng ? +f.lng : undefined,
     radius_m: +(f.radius || 500),
-    device_id: f.id || null,
+    device_id: _scanId || null,
   });
   if (result.count === 0) return console.log(result.message || "📡 No one nearby");
   if (result.global) {
@@ -64,10 +65,11 @@ export async function handleScan(f) {
 }
 
 export async function handleProfile(f) {
-  if (!f.id) return console.error("Usage: antenna profile --id <platform>:<user_id> [--name Yi --emoji 🦦 --line1 '...' --line2 '...' --line3 '...']");
+  const id = resolveId(f);
+  if (!id) return console.error("Usage: antenna profile --id <platform>:<user_id> [--name Yi --emoji 🦦 --line1 '...' --line2 '...' --line3 '...']");
   if (f.name || f.line1 || f.line2 || f.line3 || f.visible !== undefined || f.hide !== undefined) {
     const visible = f.hide ? false : (f.visible !== undefined ? f.visible === 'true' || f.visible === true : undefined);
-    const payload = { device_id: f.id };
+    const payload = { device_id: id };
     if (f.name) payload.display_name = f.name;
     if (f.emoji) payload.emoji = f.emoji;
     if (f.line1 !== undefined) payload.line1 = f.line1;
@@ -78,7 +80,7 @@ export async function handleProfile(f) {
     console.log("✅ Profile saved");
     console.log(JSON.stringify(data, null, 2));
   } else {
-    const data = await getProfile({ device_id: f.id });
+    const data = await getProfile({ device_id: id });
     if (!data) return console.log("No profile yet. Create one with --name and --line1/2/3");
     console.log(`${data.emoji || "👤"} ${data.display_name || "Anonymous"}`);
     if (data.line1) console.log(`  ${data.line1}`);
@@ -88,9 +90,10 @@ export async function handleProfile(f) {
 }
 
 export async function handleAccept(f) {
-  if (!f.id || (!f.target && !f.ref)) return console.error("Usage: antenna accept --id <platform>:<user_id> --ref 1 [--contact 'WeChat: yi']\n       antenna accept --id <platform>:<user_id> --target <ref_or_device_id> [--contact 'WeChat: yi']");
+  const id = resolveId(f);
+  if (!id || (!f.target && !f.ref)) return console.error("Usage: antenna accept --id <platform>:<user_id> --ref 1 [--contact 'WeChat: yi']\n       antenna accept --id <platform>:<user_id> --target <ref_or_device_id> [--contact 'WeChat: yi']");
   const result = await accept({
-    device_id: f.id,
+    device_id: id,
     target_device_id: f.target || null,
     ref: f.ref || null,
     contact_info: f.contact,
@@ -100,18 +103,20 @@ export async function handleAccept(f) {
 }
 
 export async function handleCheckin(f) {
-  if (!f.id || !f.lat || !f.lng) return console.error("Usage: antenna checkin --id <platform>:<user_id> --lat 39.99 --lng 116.48 [--place '三里屯']");
+  const id = resolveId(f);
+  if (!id || !f.lat || !f.lng) return console.error("Usage: antenna checkin --id <platform>:<user_id> --lat 39.99 --lng 116.48 [--place '三里屯']");
   const result = await checkin({
     lat: +f.lat,
     lng: +f.lng,
-    device_id: f.id,
+    device_id: id,
   });
   console.log(result.checked_in ? "✅ " + result.message : "❌ " + result.message);
 }
 
 export async function handleMatches(f) {
-  if (!f.id) return console.error("Usage: antenna matches --id <platform>:<user_id>");
-  const result = await checkMatches({ device_id: f.id });
+  const id = resolveId(f);
+  if (!id) return console.error("Usage: antenna matches --id <platform>:<user_id>");
+  const result = await checkMatches({ device_id: id });
   if (!result.mutual_matches.length && !result.incoming_accepts.length) {
     return console.log(result.message);
   }
@@ -130,8 +135,9 @@ export async function handleMatches(f) {
 }
 
 export async function handleDiscover(f) {
-  if (!f.id) return console.error("Usage: antenna discover --id <platform>:<user_id>");
-  const result = await discover({ device_id: f.id });
+  const id = resolveId(f);
+  if (!id) return console.error("Usage: antenna discover --id <platform>:<user_id>");
+  const result = await discover({ device_id: id });
   if (result.count === 0) return console.log(result.message || "🌍 No global recommendation available right now.");
   console.log(`🌍 Global discover:\n`);
   result.profiles.forEach((p) => {
@@ -145,6 +151,7 @@ export async function handleDiscover(f) {
 }
 
 export async function handleEvent(f) {
+  f.id = f.id || resolveId(f);
   const sub = f._?.[0] || Object.keys(f).find(k => ["create", "join", "scan", "end", "checkin", "upload-image"].includes(k));
 
   if (f['upload-image']) {
@@ -180,7 +187,8 @@ export async function handleEvent(f) {
 
   if (f.create || (!f.join && !f.scan && !f.end && !f.update && !f.approve && !f.reject && !f['add-host'] && f.name)) {
     if (!f.name) return console.error("Usage: antenna event --create --name 'AI Meetup' --id <platform>:<user_id> --starts-at '2026-04-19T14:00' --ends-at '2026-04-19T18:00' [--lat 34.05 --lng -118.25] [--desc 'description'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2']");
-    if (!f.id) return console.error("❌ --id is required (e.g. --id <platform>:<user_id>). Creator identity needed to manage the event.");
+    const id = resolveId(f);
+    if (!id) return console.error("❌ --id is required (e.g. --id <platform>:<user_id>). Creator identity needed to manage the event.");
     if (!f['starts-at'] || !f['ends-at']) return console.error("❌ --starts-at and --ends-at are required. Example: --starts-at '2026-04-19T14:00' --ends-at '2026-04-19T18:00'");
     const result = await createEvent({ name: f.name, device_id: f.id, lat: f.lat ? +f.lat : undefined, lng: f.lng ? +f.lng : undefined, starts_at: f['starts-at'], ends_at: f['ends-at'], description: f.desc || undefined, og_image: f['og-image'] || undefined, requires_approval: f['requires-approval'] === true || f['requires-approval'] === 'true' || undefined, screening_questions: f['screening-questions'] ? f['screening-questions'].split('|') : undefined });
     console.log(`\n🎉 Event created!\n`);
@@ -294,8 +302,9 @@ export async function handleEvent(f) {
 }
 
 export async function handleBind(f) {
-  if (!f.id) return console.error("Usage: antenna bind --id <platform>:<user_id>");
-  const result = await createBindToken({ device_id: f.id });
+  const id = resolveId(f);
+  if (!id) return console.error("Usage: antenna bind --id <platform>:<user_id>");
+  const result = await createBindToken({ device_id: id });
   console.log("\n🔗 GPS Binding Link:\n");
   console.log(`  ${result.url}\n`);
   console.log("Send this to the user. Opening it on their phone will share GPS with their agent.");
@@ -303,10 +312,11 @@ export async function handleBind(f) {
 }
 
 export async function handlePass(f) {
-  if (!f.id) return console.error("Usage: antenna pass --id <platform>:<user_id> --target <ref_or_device_id>");
+  const id = resolveId(f);
+  if (!id) return console.error("Usage: antenna pass --id <platform>:<user_id> --target <ref_or_device_id>");
   if (!f.target && !f.ref) return console.error("Usage: antenna pass --id <platform>:<user_id> --target <ref_or_device_id> (or --ref 1)");
   const result = await passUser({
-    device_id: f.id,
+    device_id: id,
     target_device_id: f.target,
     ref: f.ref,
   });
@@ -345,6 +355,70 @@ export async function handleSetup(f) {
   if (line2) console.log(`    ${line2}`);
   if (line3) console.log(`    ${line3}`);
   console.log();
+}
+
+// ─── Config file helpers ─────────────────────────────────────────────
+
+const CONFIG_DIR = path.join(os.homedir(), '.antenna');
+const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
+
+export function loadConfig() {
+  try {
+    if (existsSync(CONFIG_FILE)) {
+      return JSON.parse(readFileSync(CONFIG_FILE, 'utf8'));
+    }
+  } catch {}
+  return {};
+}
+
+function saveConfig(config) {
+  if (!existsSync(CONFIG_DIR)) mkdirSync(CONFIG_DIR, { recursive: true });
+  writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2) + '\n');
+}
+
+/** Resolve device_id: --id flag > config file > null */
+function resolveId(f) {
+  if (f.id) return f.id;
+  const config = loadConfig();
+  if (config.device_id) return config.device_id;
+  return null;
+}
+
+export async function handleConfig(f) {
+  if (f.key) {
+    // Verify the key against Supabase
+    console.log('\n📡 Verifying API key...');
+    try {
+      const result = await verifyApiKey({ key: f.key });
+      if (!result.valid) {
+        console.error(`\n❌ ${result.error || 'Invalid API key'}`);
+        process.exit(1);
+      }
+      const config = loadConfig();
+      config.key = f.key;
+      config.device_id = result.device_id;
+      config.display_name = result.display_name;
+      saveConfig(config);
+      console.log(`\n✅ Authenticated as ${result.display_name || 'Antenna user'}`);
+      console.log(`  Device ID: ${result.device_id}`);
+      console.log(`  Config saved to ~/.antenna/config.json\n`);
+    } catch (e) {
+      console.error(`\n❌ Failed to verify key: ${e.message}`);
+      process.exit(1);
+    }
+  } else {
+    // Show current config
+    const config = loadConfig();
+    if (config.key) {
+      console.log('\n📡 Antenna Config\n');
+      console.log(`  Key: ${config.key.slice(0, 10)}...${config.key.slice(-4)}`);
+      console.log(`  Device ID: ${config.device_id || '(unknown)'}`);
+      console.log(`  Name: ${config.display_name || '(unknown)'}\n`);
+    } else {
+      console.log('\n📡 No API key configured.');
+      console.log('  Run: antenna config --key <your-api-key>\n');
+    }
+  }
 }
 
 export async function handleStatus(f) {
@@ -907,6 +981,7 @@ Usage:
   antenna bind       --id <platform>:<user_id>
   antenna serve      Start MCP server (stdio transport)
   antenna setup      Interactive profile setup [--id <platform>:<user_id>]
+  antenna config     Configure API key [--key <ant_...>]
   antenna status     Show config & status [--id <platform>:<user_id>]
   antenna install-skill    Install SKILL.md (detects OpenClaw + Hermes)
   antenna install-plugin   Copy OpenClaw plugin template to cwd

@@ -735,3 +735,12 @@ export async function getMyEventMessages({ device_id, supabaseUrl, supabaseKey }
     count: (data || []).length,
   };
 }
+
+// ─── verifyApiKey ────────────────────────────────────────────────────
+
+export async function verifyApiKey({ key, supabaseUrl, supabaseKey }) {
+  const sb = getClient(supabaseUrl, supabaseKey);
+  const { data, error } = await sb.rpc("verify_api_key", { p_key: key });
+  if (error) throw new Error(error.message);
+  return data;
+}
