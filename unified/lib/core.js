@@ -295,7 +295,20 @@ export async function setProfile({
     console.error("Embedding generation failed (non-fatal):", e.message);
   }
 
-  return { ...data, next_step: "IMPORTANT: Now call antenna_bind to generate a GPS link for the user. Do not skip this." };
+  // Read back profile to get slug for public page link
+  let publicUrl = null;
+  try {
+    const profile = await getProfile({ device_id, supabaseUrl, supabaseKey });
+    if (profile?.profile_slug) {
+      publicUrl = `https://www.antenna.fyi/p/${profile.profile_slug}`;
+    }
+  } catch {}
+
+  return {
+    ...data,
+    public_url: publicUrl,
+    next_step: "IMPORTANT: 1) Send the public_url to the user so they can share their profile. 2) Call antenna_bind to generate a GPS link. Do not skip either step.",
+  };
 }
 
 // ─── accept ──────────────────────────────────────────────────────────
