@@ -297,6 +297,7 @@ export async function setProfile({
 
   // Read back profile to get slug for public page link
   let publicUrl = null;
+  let bindUrl = null;
   try {
     const profile = await getProfile({ device_id, supabaseUrl, supabaseKey });
     if (profile?.profile_slug) {
@@ -304,10 +305,17 @@ export async function setProfile({
     }
   } catch {}
 
+  // Auto-generate GPS bind link
+  try {
+    const bind = await createBindToken({ device_id, supabaseUrl, supabaseKey });
+    bindUrl = bind.url;
+  } catch {}
+
   return {
     ...data,
     public_url: publicUrl,
-    next_step: "IMPORTANT: 1) Send the public_url to the user so they can share their profile. 2) Call antenna_bind to generate a GPS link. Do not skip either step.",
+    gps_bind_url: bindUrl,
+    next_step: "Send the public_url and gps_bind_url to the user. The GPS link should be opened on their phone to share location.",
   };
 }
 
