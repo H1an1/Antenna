@@ -111,9 +111,9 @@ export async function startMcpServer() {
       sender_id: z.string().describe("The sender's user ID"),
       channel: z.string().describe("Channel name"),
       display_name: z.string().optional().describe("Display name"),
-      line1: z.string().optional().describe("Personal description — who you are and what you do (max 220 chars)"),
-      line2: z.string().optional().describe("Looking for — the kind of people you want to meet (max 140 chars)"),
-      line3: z.string().optional().describe("Conversation style — the type of conversations you want (max 160 chars)"),
+      personal_description: z.string().optional().describe("Personal description — who you are and what you do (max 220 chars)"),
+      looking_for: z.string().optional().describe("Looking for — the kind of people you want to meet (max 140 chars)"),
+      conversation_style: z.string().optional().describe("Conversation style — the type of conversations you want (max 160 chars)"),
       matching_context: z.string().optional().describe("Agent-generated rich context for embedding-based matching (not shown to others, max 1000 chars). Generate this FIRST, then derive the three descriptions from it."),
       interest_tags: z.array(z.string()).optional().describe("Interest/topic tags shown on the card (up to 8)"),
       city: z.string().optional().describe("Country or region (e.g. 'United States', 'Beijing')"),
@@ -121,7 +121,7 @@ export async function startMcpServer() {
       is_active: z.boolean().optional().describe("Whether the profile is active or quiet"),
       visible: z.boolean().optional().default(true),
     },
-    async ({ action, sender_id, channel, display_name, line1, line2, line3, matching_context, interest_tags, city, links, is_active, visible }) => {
+    async ({ action, sender_id, channel, display_name, personal_description, looking_for, conversation_style, matching_context, interest_tags, city, links, is_active, visible }) => {
       const deviceId = deriveDeviceId(sender_id, channel);
       try {
         if (action === "get") {
@@ -131,7 +131,7 @@ export async function startMcpServer() {
             : { profile: null, message: "还没有名片。跟用户聊聊他们是谁、做什么、想认识什么人，然后帮他们创建。", fields: PROFILE_FIELDS };
           return jsonResult(await withMatchNotifications(deviceId, result));
         }
-        const data = await setProfile({ device_id: deviceId, display_name, line1, line2, line3, matching_context, interest_tags, city, links, is_active, visible });
+        const data = await setProfile({ device_id: deviceId, display_name, line1: personal_description, line2: looking_for, line3: conversation_style, matching_context, interest_tags, city, links, is_active, visible });
         return jsonResult(await withMatchNotifications(deviceId, { saved: true, profile: data }));
       } catch (e) {
         return jsonResult({ error: e.message });

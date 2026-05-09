@@ -106,9 +106,9 @@ export async function scan({ lat, lng, radius_m = 500, device_id, supabaseUrl, s
       ref,
       name: p.display_name || "匿名",
       emoji: p.emoji || "👤",
-      line1: p.line1,
-      line2: p.line2,
-      line3: p.line3,
+      personal_description: p.line1,
+      looking_for: p.line2,
+      conversation_style: p.line3,
       distance_m: p.distance_m ?? p.dist_meters ?? null,
     };
   });
@@ -185,9 +185,9 @@ export async function scan({ lat, lng, radius_m = 500, device_id, supabaseUrl, s
 
 export const PROFILE_FIELDS = {
   display_name: { label: "显示名称", description: "How you want to be called" },
-  line1: { label: "个人描述", description: "Who you are and what you do", maxLength: 220, required: true },
-  line2: { label: "想认识的人", description: "The kind of people you want to meet", maxLength: 140 },
-  line3: { label: "想要的交流方式", description: "The type of conversations you want", maxLength: 160 },
+  personal_description: { label: "个人描述", description: "Who you are and what you do", maxLength: 220, required: true },
+  looking_for: { label: "想认识的人", description: "The kind of people you want to meet", maxLength: 140 },
+  conversation_style: { label: "想要的交流方式", description: "The type of conversations you want", maxLength: 160 },
   matching_context: { label: "匹配上下文", description: "Agent-generated rich context for better matching (not shown to others)", maxLength: 1000 },
   interest_tags: { label: "兴趣标签", description: "Interest/topic tags shown on the card (up to 8)", maxItems: 8 },
   city: { label: "国家/地区", description: "Country or region" },
@@ -418,9 +418,9 @@ export async function checkMatches({ device_id, supabaseUrl, supabaseKey }) {
     _device_id: m.target_id,
     name: m.name || "匿名",
     emoji: m.emoji || "👤",
-    line1: m.line1,
-    line2: m.line2,
-    line3: m.line3,
+    personal_description: m.line1,
+    looking_for: m.line2,
+    conversation_style: m.line3,
     their_contact: m.their_contact || null,
     you_shared: m.you_shared || null,
   }));
@@ -431,9 +431,9 @@ export async function checkMatches({ device_id, supabaseUrl, supabaseKey }) {
     _device_id: m.target_id,
     name: m.name || "匿名",
     emoji: m.emoji || "👤",
-    line1: m.line1,
-    line2: m.line2,
-    line3: m.line3,
+    personal_description: m.line1,
+    looking_for: m.line2,
+    conversation_style: m.line3,
   }));
 
   const messages = [];
@@ -503,9 +503,9 @@ export async function discover({ device_id, supabaseUrl, supabaseKey }) {
       ref,
       name: p.display_name || "匿名",
       emoji: p.emoji || "👤",
-      line1: p.line1,
-      line2: p.line2,
-      line3: p.line3,
+      personal_description: p.line1,
+      looking_for: p.line2,
+      conversation_style: p.line3,
       match_reason: reason,
     });
   }
@@ -694,9 +694,9 @@ export async function eventScan({ code, device_id, supabaseUrl, supabaseKey }) {
       ref,
       name: p.display_name || "匿名",
       emoji: p.emoji || "👤",
-      line1: p.line1,
-      line2: p.line2,
-      line3: p.line3,
+      personal_description: p.line1,
+      looking_for: p.line2,
+      conversation_style: p.line3,
       checked_in: !!p.checked_in,
       role: p.role || "participant",
       status: p.status || "active",
