@@ -25,6 +25,7 @@ import {
   addCohost,
   sendEventMessage,
   deriveDeviceId,
+  PROFILE_FIELDS,
 } from "./core.js";
 
 export async function startMcpServer() {
@@ -104,17 +105,17 @@ export async function startMcpServer() {
 
   server.tool(
     "antenna_profile",
-    "Get or set the user's Antenna profile card.",
+    "Get or set the user's Antenna profile card. The profile has a display name and three descriptions: personal description, looking for, and conversation style.",
     {
       action: z.enum(["get", "set"]).describe("'get' to read, 'set' to write"),
       sender_id: z.string().describe("The sender's user ID"),
       channel: z.string().describe("Channel name"),
-      display_name: z.string().optional(),
-      emoji: z.string().optional(),
-      line1: z.string().optional(),
-      line2: z.string().optional(),
-      line3: z.string().optional(),
-      matching_context: z.string().optional().describe("Agent-generated rich context for better matching (not shown to others)"),
+      display_name: z.string().optional().describe("Display name"),
+      emoji: z.string().optional().describe("Profile emoji (stored but not displayed on card)"),
+      line1: z.string().optional().describe("Personal description — who you are and what you do (max 220 chars)"),
+      line2: z.string().optional().describe("Looking for — the kind of people you want to meet (max 140 chars)"),
+      line3: z.string().optional().describe("Conversation style — the type of conversations you want (max 160 chars)"),
+      matching_context: z.string().optional().describe("Agent-generated rich context for embedding-based matching (not shown to others, max 1000 chars). Generate this FIRST, then derive the three descriptions from it."),
       visible: z.boolean().optional().default(true),
     },
     async ({ action, sender_id, channel, display_name, emoji, line1, line2, line3, matching_context, visible }) => {
@@ -122,7 +123,9 @@ export async function startMcpServer() {
       try {
         if (action === "get") {
           const data = await getProfile({ device_id: deviceId });
-          const result = data ? { profile: data } : { profile: null, message: "还没有名片，帮你创建一个？" };
+          const result = data
+            ? { profile: data, fields: PROFILE_FIELDS }
+            : { profile: null, message: "还没有名片。跟用户聊聊他们是谁、做什么、想认识什么人，然后帮他们创建。", fields: PROFILE_FIELDS };
           return jsonResult(await withMatchNotifications(deviceId, result));
         }
         const data = await setProfile({ device_id: deviceId, display_name, emoji, line1, line2, line3, matching_context, visible });

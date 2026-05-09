@@ -181,6 +181,16 @@ export async function scan({ lat, lng, radius_m = 500, device_id, supabaseUrl, s
   };
 }
 
+// ─── Profile field metadata (self-describing API) ───────────────────
+
+export const PROFILE_FIELDS = {
+  display_name: { label: "显示名称", description: "How you want to be called" },
+  line1: { label: "个人描述", description: "Who you are and what you do", maxLength: 220, required: true },
+  line2: { label: "想认识的人", description: "The kind of people you want to meet", maxLength: 140 },
+  line3: { label: "想要的交流方式", description: "The type of conversations you want", maxLength: 160 },
+  matching_context: { label: "匹配上下文", description: "Agent-generated rich context for better matching (not shown to others)", maxLength: 1000 },
+};
+
 // ─── getProfile ──────────────────────────────────────────────────────
 
 export async function getProfile({ device_id, supabaseUrl, supabaseKey }) {
