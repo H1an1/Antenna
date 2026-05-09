@@ -7,6 +7,34 @@ Versioning: Plugin / CLI / MCP 分开标版本号。
 
 ---
 
+## [v1.3.16] — 2026-05-09
+
+### Added
+- **Self-describing profile API** — `antenna_profile(get)` returns `fields` metadata (label, description, maxLength) so agents know what to fill without reading SKILL.md
+- **`antenna config --key`** — New CLI command to authenticate with API key, stores device_id in `~/.antenna/config.json`
+- **`verify_api_key` RPC** — Supabase function for API key verification (callable by anon)
+- **First-class structured fields** — `interest_tags`, `city`, `links`, `is_active` are now real tool parameters (auto-packed into matching_context JSON)
+- **Auto GPS bind on save** — `setProfile` returns `gps_bind_url` alongside `public_url`, no need to call `antenna_bind` separately
+- **Public profile URL** — `setProfile` returns `public_url` (antenna.fyi/p/<slug>) for agent to share with user
+- **Archetype override** — Custom archetype name/reason per user via `archetypeOverride` in matching_context
+- **Empty profile card state** — Dashboard shows onboarding prompt for new users
+- **Profile card back placeholder** — Shows "Your archetype awaits" when profile is incomplete
+
+### Changed
+- **Profile fields renamed** — line1/2/3 now have semantic descriptions (personal description / looking for / conversation style)
+- **Emoji removed** — No longer a tool parameter or shown on card
+- **City field** — Replaced manual text input with GPS update button; reverseGeocode returns "Country, City" format
+- **Setup prompt** — One-liner `npm install -g antenna-fyi && antenna config --key <key>`, behavior in skill file
+- **Onboarding flow** — Agent-first: assumes user registered on antenna.fyi and has API key
+- **CLI auto-resolve** — All commands read device_id from config when `--id` omitted
+- **Field naming** — Unified snake_case: `matching_context`, `interest_tags`, `is_active`
+
+### Fixed
+- Save profile closes editor (returns to card view)
+- "Get your key" button opens API modal (same as "API settings")
+- Public page `/p/[slug]` uses dashboard ProfileCard component, centered layout
+- SKILL.md field consistency with actual tool parameters
+
 ## [v1.3.8] — 2026-05-08
 
 ### Added
