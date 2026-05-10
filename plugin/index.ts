@@ -416,11 +416,21 @@ export default function register(api: any) {
 
       if (error) return ok({ error: error.message });
 
+      // Read back profile to get slug for public page link
+      let publicUrl = null;
+      try {
+        const { data: profile } = await supabase.rpc("get_profile", { p_device_id: deviceId });
+        if (profile?.profile_slug) {
+          publicUrl = `https://www.antenna.fyi/p/${profile.profile_slug}`;
+        }
+      } catch {}
+
       return ok({
         updated: true,
-        profile: { display_name: data.display_name, emoji: data.emoji,
+        profile: { display_name: data.display_name,
           line1: data.line1, line2: data.line2, line3: data.line3, visible: data.visible },
-        next_step: "IMPORTANT: Now call antenna_bind to generate a GPS link for the user. Do not skip this.",
+        public_url: publicUrl,
+        next_step: "IMPORTANT: 1) Send the public_url to the user — this is their shareable profile link. 2) Call antenna_bind to generate a GPS link. Do not skip either step.",
       });
     },
   });
