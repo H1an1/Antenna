@@ -1,6 +1,6 @@
 // antenna CLI command handlers
 
-import { scan, getProfile, setProfile, accept, checkMatches, checkin, createBindToken, discover, createEvent, endEvent, eventCheckin, joinEvent, eventScan, pass as passUser, uploadEventImage, updateEvent, approveParticipant, rejectParticipant, addCohost, sendEventMessage, getMyEventMessages, getClient, verifyApiKey } from "./core.js";
+import { scan, getProfile, setProfile, accept, checkMatches, checkin, createBindToken, discover, createEvent, endEvent, eventCheckin, joinEvent, eventScan, pass as passUser, uploadEventImage, updateEvent, approveParticipant, rejectParticipant, addCohost, sendEventMessage, getMyEventMessages, getClient, verifyApiKey, linkAccount, initialRecommendations } from "./core.js";
 import { createInterface } from "readline";
 import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync, unlinkSync, renameSync } from "fs";
 import path from "path";
@@ -401,9 +401,11 @@ export async function handleConfig(f) {
       const config = loadConfig();
       config.key = f.key;
       config.device_id = result.device_id;
+      config.user_id = result.user_id;
       config.display_name = result.display_name;
       saveConfig(config);
       console.log(`\n✅ Authenticated as ${result.display_name || 'Antenna user'}`);
+      console.log(`  User ID: ${result.user_id}`);
       console.log(`  Device ID: ${result.device_id}`);
       console.log(`  Config saved to ~/.antenna/config.json\n`);
     } catch (e) {
@@ -422,6 +424,26 @@ export async function handleConfig(f) {
       console.log('\n📡 No API key configured.');
       console.log('  Run: antenna config --key <your-api-key>\n');
     }
+  }
+}
+
+export async function handleLinkAccount(f) {
+  const id = resolveId(f);
+  const config = loadConfig();
+  const userId = f['user-id'] || f.userId || config.user_id;
+  if (!id) return console.error("Usage: antenna link-account --id <platform>:<user_id> --user-id <antenna.fyi UUID>\n       Or: antenna link-account (uses config device_id + user_id)");
+  if (!userId) return console.error("❌ No user_id. Run 'antenna config --key <your-key>' first, or pass --user-id <UUID>.");
+  try {
+    const result = await linkAccount({ device_id: id, user_id: userId });
+    if (result.error) {
+      console.error(`\n❌ ${result.message || result.error}`);
+    } else {
+      console.log(`\n✅ ${result.message || 'Account linked.'}`);
+      console.log(`  Device ID: ${id}`);
+      console.log(`  User ID: ${userId}\n`);
+    }
+  } catch (e) {
+    console.error(`\n❌ Failed: ${e.message}`);
   }
 }
 

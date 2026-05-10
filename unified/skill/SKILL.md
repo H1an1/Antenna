@@ -24,33 +24,39 @@ Antenna 帮你的用户发现值得认识的人。不只是"附近的人"--profi
 - 如果没有,用 CLI:`antenna <command> [flags]`。
 - **所有 tool 必须传 `chat_id`**--Antenna 用它发通知。
 
-## Onboarding - 装上后主动引导
+## Onboarding — 装上后主动引导
 
-Plugin 安装后,agent **主动**开始引导,不要等用户问。
+Plugin 安装后，agent **主动**开始引导，不要等用户问。
 
-**前置条件:** 用户需要先在 antenna.fyi 注册账号,从 Dashboard 获取 API key。如果没注册,引导去 antenna.fyi。
+**前置条件：** 用户需要先在 antenna.fyi 注册账号，从 Dashboard 获取 API key。如果没注册，引导去 antenna.fyi。
 
 ### 流程
 
-**第一步:打招呼 + 解释**
-> "嘿,你装了 Antenna--它能帮你发现有意思的人。先确认一下,你在 antenna.fyi 注册过了吗?拿到 API key 了吗?"
+**第一步：拿到 API key → 配置**
+> "嘿，你装了 Antenna——它能帮你发现有意思的人。先确认一下，你在 antenna.fyi 注册过了吗？拿到 API key 了吗？"
 
-**第二步:聊天收集 → 生成名片 → 确认**
+用户给了 API key 后，调 `antenna config --key <key>` 验证。这会返回 `user_id` 和 `device_id`。
 
-跟用户聊几句,了解他们是谁、做什么、想认识什么人。然后 agent 自己生成:
-- more_information(~200 字,给 agent 匹配用的私密上下文,不展示给别人)
+**⚠️ 之后所有操作必须用 API key 验证返回的 device_id（格式 `user:xxx`）。不要自己拼 `channel:sender_id`。** 这样 agent 创建的 profile 才能在 dashboard 上显示。
+
+**第二步：聊天收集 → 生成名片 → 确认**
+
+跟用户聊几句，了解他们是谁、做什么、想认识什么人。然后 agent 自己生成：
+- more_information（~200 字，给 agent 匹配用的私密上下文，不展示给别人）
 - 从中提炼 line1/2/3 + display_name
 
-展示预览给用户确认:
-> 你的名片:
+展示预览给用户确认：
+> 你的名片：
 > Yi
-> · Product Designer,做 AI 搜索体验
+> · Product Designer，做 AI 搜索体验
 > · 对 AI agent、音乐、游泳感兴趣
 > · 想认识做 AI 产品和独立创作的人
 >
-> 这样可以吗?要改哪里告诉我。
+> 这样可以吗？要改哪里告诉我。
 
-确认后才调 `antenna_profile(action="set")` 保存。**不要跳过确认。**
+确认后用 config 里的 device_id 调 `antenna_profile(action="set")` 保存。**不要跳过确认。**
+
+**⚠️ sender_id 用 config 里的 device_id，不要用 channel:sender_id。**
 
 **第三步:立刻推荐 2-3 个人**
 
@@ -179,15 +185,15 @@ openclaw cron add --every 1h --message "Check antenna matches: call antenna_chec
 - 一次性操作
 
 ### `antenna_discover`
-全球推荐——每天 1 个最匹配的人。
+全球推荐--每天 1 个最匹配的人。
 - `sender_id`, `channel`, `chat_id`
 - 不需要 GPS
-- 如果所有人都推荐过了，返回“等新人加入”
+- 如果所有人都推荐过了,返回"等新人加入"
 
 ### `antenna_initial_recommendations`
-首次推荐——注册后立刻看到 2-3 个最匹配的人。
+首次推荐--注册后立刻看到 2-3 个最匹配的人。
 - `sender_id`, `channel`, `chat_id`: from context
-- One-time only — second call returns empty
+- One-time only - second call returns empty
 - Does NOT consume daily discover quota
 - Use in onboarding step 3, right after profile save
 

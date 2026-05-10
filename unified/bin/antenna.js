@@ -15,6 +15,7 @@ import {
   handleSetup,
   handleConfig,
   handleStatus,
+  handleLinkAccount,
   handleInstallSkill,
   handleInstallPlugin,
   handleInstallHermesPlugin,
@@ -56,6 +57,8 @@ async function main() {
       return handleConfig(f);
     case "status":
       return handleStatus(f);
+    case "link-account":
+      return handleLinkAccount(f);
     case "install-skill":
       return handleInstallSkill();
     case "install-plugin":
