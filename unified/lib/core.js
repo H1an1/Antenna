@@ -109,6 +109,8 @@ export async function scan({ lat, lng, radius_m = 500, device_id, supabaseUrl, s
       personal_description: p.line1,
       looking_for: p.line2,
       conversation_style: p.line3,
+      more_information: p.matching_context || null,
+      profile_slug: p.profile_slug || null,
       distance_m: p.distance_m ?? p.dist_meters ?? null,
     };
   });
@@ -336,6 +338,7 @@ export async function accept({
   device_id,
   target_device_id,
   ref,
+  profile_slug,
   contact_info,
   supabaseUrl,
   supabaseKey,
@@ -348,8 +351,16 @@ export async function accept({
     const { data } = await sb.rpc("resolve_ref", { p_owner: device_id, p_ref: ref });
     targetId = data;
   }
+  // Resolve profile_slug to device_id
+  if (!targetId && profile_slug) {
+    const { data: slugProfile } = await sb.rpc("get_profile_by_slug", { p_slug: profile_slug });
+    const resolved = Array.isArray(slugProfile) ? slugProfile[0] : slugProfile;
+    if (resolved?.device_id) {
+      targetId = resolved.device_id;
+    }
+  }
   if (!targetId) {
-    return { accepted: false, error: "No target. Ref may have expired — try scanning again." };
+    return { accepted: false, error: "No target. Provide ref, target_device_id, or profile_slug." };
   }
 
   const { error } = await sb.rpc("upsert_match", {
@@ -517,6 +528,8 @@ export async function discover({ device_id, supabaseUrl, supabaseKey }) {
       personal_description: p.line1,
       looking_for: p.line2,
       conversation_style: p.line3,
+      more_information: p.matching_context || null,
+      profile_slug: p.profile_slug || null,
       match_reason: reason,
     });
   }
@@ -708,6 +721,8 @@ export async function eventScan({ code, device_id, supabaseUrl, supabaseKey }) {
       personal_description: p.line1,
       looking_for: p.line2,
       conversation_style: p.line3,
+      more_information: p.matching_context || null,
+      profile_slug: p.profile_slug || null,
       checked_in: !!p.checked_in,
       role: p.role || "participant",
       status: p.status || "active",
@@ -825,4 +840,20 @@ export async function verifyApiKey({ key, supabaseUrl, supabaseKey }) {
   const { data, error } = await sb.rpc("verify_api_key", { p_key: key });
   if (error) throw new Error(error.message);
   return data;
+}
+
+// ─── linkAccount (bind user_id to device_id) ─────────────────────────
+
+export async function linkAccount({ device_id, user_id, supabaseUrl, supabaseKey }) {
+  const sb = getClient(supabaseUrl, supabaseKey);
+  const { data, error } = await sb.rpc("bind_user_id", {
+    p_device_id: device_id,
+    p_user_id: user_id,
+  });
+  if (error) throw new Error(error.message);
+  if (data?.error) return data;
+  return {
+    ...data,
+    message: "账号已关联！现在你可以在 antenna.fyi/me 看到你的完整 profile 和匹配记录了。",
+  };
 }

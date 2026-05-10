@@ -33,6 +33,7 @@ from .tools import (
     handle_event_reject,
     handle_event_add_host,
     handle_event_message,
+    handle_link_account,
     _sb,
     _device_id,
     _my_device_ids,
@@ -57,6 +58,7 @@ from .schemas import (
     EVENT_REJECT_SCHEMA,
     EVENT_ADD_HOST_SCHEMA,
     EVENT_MESSAGE_SCHEMA,
+    LINK_ACCOUNT_SCHEMA,
 )
 import re
 import time
@@ -92,6 +94,7 @@ def register(ctx):
     ctx.register_tool("antenna_event_reject", EVENT_REJECT_SCHEMA, handle_event_reject)
     ctx.register_tool("antenna_event_add_host", EVENT_ADD_HOST_SCHEMA, handle_event_add_host)
     ctx.register_tool("antenna_event_message", EVENT_MESSAGE_SCHEMA, handle_event_message)
+    ctx.register_tool("antenna_link_account", LINK_ACCOUNT_SCHEMA, handle_link_account)
 
     # ── Hook: auto-detect location + check web GPS events ─────────
     def on_pre_llm(messages, **kwargs):

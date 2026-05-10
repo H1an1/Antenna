@@ -24,6 +24,7 @@ import {
   rejectParticipant,
   addCohost,
   sendEventMessage,
+  linkAccount,
   deriveDeviceId,
   PROFILE_FIELDS,
 } from "./core.js";
@@ -143,18 +144,19 @@ export async function startMcpServer() {
 
   server.tool(
     "antenna_accept",
-    "Accept a match. Use 'ref' from scan results (e.g. '1', '2') OR target_device_id directly.",
+    "Accept a match. Use 'ref' from scan results (e.g. '1', '2'), target_device_id, or profile_slug (from a public profile link like antenna.fyi/p/SLUG). Optionally share contact info.",
     {
       sender_id: z.string().describe("The sender's user ID"),
       channel: z.string().describe("Channel name"),
       ref: z.string().optional().describe("Ref number from scan results (e.g. '1')"),
-      target_device_id: z.string().optional().describe("Device ID (use ref instead when possible)"),
+      target_device_id: z.string().optional().describe("Device ID (use ref or profile_slug instead when possible)"),
+      profile_slug: z.string().optional().describe("Profile slug from a public profile link (e.g. 'yi' from antenna.fyi/p/yi). Resolves to device_id automatically."),
       contact_info: z.string().optional().describe("Contact info to share"),
     },
-    async ({ sender_id, channel, ref, target_device_id, contact_info }) => {
+    async ({ sender_id, channel, ref, target_device_id, profile_slug, contact_info }) => {
       try {
         const deviceId = deriveDeviceId(sender_id, channel);
-        const result = await accept({ device_id: deviceId, target_device_id, ref, contact_info });
+        const result = await accept({ device_id: deviceId, target_device_id, ref, profile_slug, contact_info });
         return jsonResult(await withMatchNotifications(deviceId, result));
       } catch (e) {
         return jsonResult({ error: e.message });
@@ -503,6 +505,24 @@ export async function startMcpServer() {
     async ({ code, sender_id, channel, chat_id, message, ref }) => {
       try {
         const result = await sendEventMessage({ code, device_id: deriveDeviceId(sender_id, channel), message, target_ref: ref });
+        return jsonResult(result);
+      } catch (e) { return jsonResult({ error: e.message }); }
+    }
+  );
+
+  // ─── antenna_link_account ────────────────────────────────
+
+  server.tool(
+    "antenna_link_account",
+    "Link your Antenna agent profile to your antenna.fyi website account. The user needs to provide their user_id from the dashboard (antenna.fyi/me). After linking, the dashboard will show the same profile and match history.",
+    {
+      sender_id: z.string().describe("The sender's user ID"),
+      channel: z.string().describe("Channel name"),
+      user_id: z.string().describe("The user's antenna.fyi account UUID, visible on their dashboard"),
+    },
+    async ({ sender_id, channel, user_id }) => {
+      try {
+        const result = await linkAccount({ device_id: deriveDeviceId(sender_id, channel), user_id });
         return jsonResult(result);
       } catch (e) { return jsonResult({ error: e.message }); }
     }

@@ -64,7 +64,8 @@ PROFILE_SCHEMA = {
 ACCEPT_SCHEMA = {
     "name": "antenna_accept",
     "description": (
-        "Accept a match. Use 'ref' from scan results (e.g. '1', '2') or target_device_id. "
+        "Accept a match. Use 'ref' from scan results (e.g. '1', '2'), target_device_id, "
+        "or profile_slug (from a public profile link like antenna.fyi/p/SLUG). "
         "Optionally share contact info."
     ),
     "parameters": {
@@ -79,7 +80,11 @@ ACCEPT_SCHEMA = {
             },
             "target_device_id": {
                 "type": "string",
-                "description": "Device ID (use ref instead when possible)",
+                "description": "Device ID (use ref or profile_slug instead when possible)",
+            },
+            "profile_slug": {
+                "type": "string",
+                "description": "Profile slug from a public profile link (e.g. 'yi' from antenna.fyi/p/yi). Resolves to device_id automatically.",
             },
             "contact_info": {
                 "type": "string",
@@ -376,5 +381,24 @@ EVENT_MESSAGE_SCHEMA = {
             "ref": {"type": "string", "description": "Ref number of specific participant (omit for broadcast)"},
         },
         "required": ["code", "sender_id", "channel", "message", "chat_id"],
+    },
+}
+
+LINK_ACCOUNT_SCHEMA = {
+    "name": "antenna_link_account",
+    "description": (
+        "Link your Antenna agent profile to your antenna.fyi website account. "
+        "The user needs to provide their user_id from the dashboard (antenna.fyi/me). "
+        "After linking, the dashboard will show the same profile and match history."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "sender_id": {"type": "string", "description": "The sender's user ID"},
+            "channel": {"type": "string", "description": "Platform name"},
+            "chat_id": {"type": "string", "description": "REQUIRED. Pass the chat/channel ID from message context."},
+            "user_id": {"type": "string", "description": "The user's antenna.fyi account UUID, visible on their dashboard"},
+        },
+        "required": ["sender_id", "channel", "chat_id", "user_id"],
     },
 }

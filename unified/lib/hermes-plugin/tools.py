@@ -127,6 +127,8 @@ def handle_scan(params: dict) -> str:
             "line1": p.get("line1"),
             "line2": p.get("line2"),
             "line3": p.get("line3"),
+            "more_information": p.get("matching_context") or None,
+            "profile_slug": p.get("profile_slug") or None,
             "distance_m": p.get("distance_m") or p.get("dist_meters"),
         })
 
@@ -191,8 +193,19 @@ def handle_accept(params: dict) -> str:
                 target = rr.data
         except Exception:
             pass
+    # Resolve profile_slug to device_id
+    if not target and params.get("profile_slug"):
+        try:
+            slug_resp = sb.rpc("get_profile_by_slug", {"p_slug": params["profile_slug"]}).execute()
+            slug_data = slug_resp.data
+            if isinstance(slug_data, list) and slug_data:
+                target = slug_data[0].get("device_id")
+            elif isinstance(slug_data, dict) and slug_data.get("device_id"):
+                target = slug_data["device_id"]
+        except Exception:
+            pass
     if not target:
-        return _ok({"error": "No target. Use 'ref' from scan results or 'target_device_id'."})
+        return _ok({"error": "No target. Provide ref, target_device_id, or profile_slug."})
 
     sb.rpc("upsert_match", {
         "p_device_id_a": did,
@@ -381,6 +394,8 @@ def handle_discover(params: dict) -> str:
             "line1": p.get("line1"),
             "line2": p.get("line2"),
             "line3": p.get("line3"),
+            "more_information": p.get("matching_context") or None,
+            "profile_slug": p.get("profile_slug") or None,
         }
         if match_reason:
             profile["match_reason"] = match_reason
@@ -553,6 +568,8 @@ def handle_event_scan(params: dict) -> str:
             "line1": p.get("line1"),
             "line2": p.get("line2"),
             "line3": p.get("line3"),
+            "more_information": p.get("matching_context") or None,
+            "profile_slug": p.get("profile_slug") or None,
             "checked_in": bool(p.get("checked_in")),
             "role": p.get("role") or "participant",
             "status": p.get("status") or "active",
@@ -700,3 +717,21 @@ def handle_event_message(params: dict) -> str:
         rpc_params["p_target_ref"] = params["ref"]
     resp = sb.rpc("send_event_message", rpc_params).execute()
     return _ok(resp.data or {"error": "send_event_message failed"})
+
+
+def handle_link_account(params: dict) -> str:
+    """Link agent profile to antenna.fyi website account."""
+    sb = _sb()
+    did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
+
+    resp = sb.rpc("bind_user_id", {
+        "p_device_id": did,
+        "p_user_id": params["user_id"],
+    }).execute()
+
+    if resp.data and resp.data.get("error"):
+        return _ok(resp.data)
+
+    data = resp.data or {}
+    data["message"] = "账号已关联！现在你可以在 antenna.fyi/me 看到你的完整 profile 和匹配记录了。"
+    return _ok(data)

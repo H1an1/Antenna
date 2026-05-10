@@ -26,6 +26,8 @@ interface Profile {
   line2: string | null;
   line3: string | null;
   emoji: string | null;
+  profile_slug: string | null;
+  matching_context: string | null;
   visible: boolean;
   last_seen_at?: string;
 }
@@ -315,7 +317,7 @@ export default function register(api: any) {
           const gProfiles = globalOthers.map((p: any, i: number) => {
             const ref = String(i + 1);
             gRefMap[ref] = p.device_id;
-            return { ref, emoji: p.emoji || "👤", name: p.display_name || "匿名", line1: p.line1, line2: p.line2, line3: p.line3 };
+            return { ref, emoji: p.emoji || "👤", name: p.display_name || "匿名", line1: p.line1, line2: p.line2, line3: p.line3, more_information: p.matching_context || null, profile_slug: p.profile_slug || null };
           });
           (api as any)._antennaRefMap = gRefMap;
           try { await supabase.rpc("save_scan_refs", { p_owner: deviceId, p_refs: gRefMap }); } catch {}
@@ -342,6 +344,8 @@ export default function register(api: any) {
           line1: p.line1,
           line2: p.line2,
           line3: p.line3,
+          more_information: p.matching_context || null,
+          profile_slug: p.profile_slug || null,
           distance_m: p.distance_m ?? p.dist_meters ?? null,
         };
       });
@@ -381,7 +385,7 @@ export default function register(api: any) {
         line2: { type: "string", description: "Second line (what you're into)" },
         line3: { type: "string", description: "Third line (what you're looking for)" },
         visible: { type: "boolean", description: "Whether to be visible to others" },
-        matching_context: { type: "string", description: "Free-form context for AI matching (interests, goals, etc.)" },
+        matching_context: { type: "string", description: "More information / free-form context for AI matching (interests, goals, background, etc.)" },
       },
       required: ["action", "sender_id", "channel", "chat_id"],
     },
@@ -475,7 +479,7 @@ export default function register(api: any) {
   api.registerTool({
     name: "antenna_accept",
     description:
-      "Accept a match. Use 'ref' from scan results (e.g. '1', '2') or target_device_id. Optionally share contact info.",
+      "Accept a match. Use 'ref' from scan results (e.g. '1', '2'), target_device_id, or profile_slug (from a public profile link like antenna.fyi/p/SLUG). Optionally share contact info.",
     parameters: {
       type: "object",
       properties: {
@@ -483,7 +487,8 @@ export default function register(api: any) {
         channel: { type: "string" },
         chat_id: { type: "string", description: "REQUIRED for notifications. Pass the chat/channel ID from your message context so Antenna can send you match and event notifications." },
         ref: { type: "string", description: "Ref number from scan results (e.g. '1')" },
-        target_device_id: { type: "string", description: "Device ID (use ref instead when possible)" },
+        target_device_id: { type: "string", description: "Device ID (use ref or profile_slug instead when possible)" },
+        profile_slug: { type: "string", description: "Profile slug from a public profile link (e.g. 'yi' from antenna.fyi/p/yi). Resolves to device_id automatically." },
         contact_info: { type: "string", description: "Optional contact info to share" },
       },
       required: ["sender_id", "channel", "chat_id"],
@@ -500,8 +505,16 @@ export default function register(api: any) {
         const { data: resolved } = await supabase.rpc("resolve_ref", { p_owner: deviceId, p_ref: params.ref });
         targetId = resolved || (api as any)._antennaRefMap?.[params.ref];
       }
+      // Resolve profile_slug to device_id via get_profile_by_slug RPC
+      if (!targetId && params.profile_slug) {
+        const { data: slugProfile } = await supabase.rpc("get_profile_by_slug", { p_slug: params.profile_slug });
+        const resolved = Array.isArray(slugProfile) ? slugProfile[0] : slugProfile;
+        if (resolved?.device_id) {
+          targetId = resolved.device_id;
+        }
+      }
       if (!targetId) {
-        return ok({ error: "No target. Ref may have expired — try scanning again." });
+        return ok({ error: "No target. Provide ref, target_device_id, or profile_slug." });
       }
 
       const { error } = await supabase.rpc("upsert_match", {
@@ -590,6 +603,45 @@ export default function register(api: any) {
   });
 
   // ═══════════════════════════════════════════════════════════════════
+  // Tool: antenna_link_account
+  // ═══════════════════════════════════════════════════════════════════
+  api.registerTool({
+    name: "antenna_link_account",
+    description:
+      "Link your Antenna agent profile to your antenna.fyi website account. The user needs to provide their user_id from the dashboard (antenna.fyi/me). After linking, the dashboard will show the same profile and match history.",
+    parameters: {
+      type: "object",
+      properties: {
+        sender_id: { type: "string", description: "The sender's user ID" },
+        channel: { type: "string", description: "The channel name" },
+        chat_id: { type: "string", description: "REQUIRED. Pass the chat/channel ID from your message context." },
+        user_id: { type: "string", description: "The user's antenna.fyi account UUID, visible on their dashboard" },
+      },
+      required: ["sender_id", "channel", "chat_id", "user_id"],
+    },
+    async execute(_id: string, params: any) {
+      const cfg = getConfig(api);
+      const supabase = getSupabase(cfg);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
+
+      const { data, error } = await supabase.rpc("bind_user_id", {
+        p_device_id: deviceId,
+        p_user_id: params.user_id,
+      });
+      if (error) return ok({ error: error.message });
+
+      if (data?.error) {
+        return ok(data);
+      }
+
+      return ok({
+        ...data,
+        message: "账号已关联！现在你可以在 antenna.fyi/me 看到你的完整 profile 和匹配记录了。",
+      });
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
   // Tool: antenna_discover
   // ═══════════════════════════════════════════════════════════════════
   api.registerTool({
@@ -651,7 +703,7 @@ export default function register(api: any) {
           } catch { /* best effort */ }
         }
 
-        profiles.push({ ref, emoji: p.emoji || "👤", name: p.display_name || "匿名", line1: p.line1, line2: p.line2, line3: p.line3, match_reason });
+        profiles.push({ ref, emoji: p.emoji || "👤", name: p.display_name || "匿名", line1: p.line1, line2: p.line2, line3: p.line3, more_information: p.matching_context || null, profile_slug: p.profile_slug || null, match_reason });
       }
 
       // Persist refs + log recommendation
@@ -858,7 +910,7 @@ export default function register(api: any) {
       const profiles = others.map((p, i) => {
         const ref = String(i + 1);
         _refMap[ref] = p.device_id;
-        return { ref, emoji: p.emoji || "👤", name: p.display_name || "匿名", line1: p.line1, line2: p.line2, line3: p.line3, checked_in: !!p.checked_in, role: p.role || "participant", status: p.status || "active", application_context: p.application_context || null, source: "event" };
+        return { ref, emoji: p.emoji || "👤", name: p.display_name || "匿名", line1: p.line1, line2: p.line2, line3: p.line3, more_information: p.matching_context || null, profile_slug: p.profile_slug || null, checked_in: !!p.checked_in, role: p.role || "participant", status: p.status || "active", application_context: p.application_context || null, source: "event" };
       });
 
       (api as any)._antennaRefMap = { ...(api as any)._antennaRefMap, ..._refMap };
