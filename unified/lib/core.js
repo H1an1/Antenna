@@ -558,6 +558,81 @@ export async function discover({ device_id, supabaseUrl, supabaseKey }) {
   };
 }
 
+// ─── initialRecommendations (one-time first-use) ──────────────────────
+
+export async function initialRecommendations({ device_id, supabaseUrl, supabaseKey }) {
+  const sb = getClient(supabaseUrl, supabaseKey);
+
+  const { data: results, error } = await sb.rpc("initial_recommendations", {
+    p_device_id: device_id,
+    p_limit: 3,
+  });
+
+  if (error) throw new Error(error.message);
+
+  if (!results || results.length === 0) {
+    return {
+      count: 0,
+      profiles: [],
+      initial: true,
+      message: "暂时没有推荐，等有更多人加入！",
+    };
+  }
+
+  // Build ref map + generate match reasons
+  const _refMap = {};
+  const myProfile = await getProfile({ device_id, supabaseUrl, supabaseKey });
+  const myLines = myProfile ? [myProfile.line1, myProfile.line2, myProfile.line3].filter(Boolean).join(". ") : "";
+
+  const profiles = [];
+  for (let i = 0; i < results.length; i++) {
+    const p = results[i];
+    const ref = String(i + 1);
+    _refMap[ref] = p.device_id;
+
+    const theirLines = [p.line1, p.line2, p.line3].filter(Boolean).join(". ");
+    let reason = null;
+    if (myLines && theirLines) {
+      reason = await generateMatchReason(myLines, theirLines);
+    }
+
+    profiles.push({
+      ref,
+      name: p.display_name || "匿名",
+      emoji: p.emoji || "👤",
+      personal_description: p.line1,
+      looking_for: p.line2,
+      conversation_style: p.line3,
+      more_information: p.matching_context || null,
+      profile_slug: p.profile_slug || null,
+      match_reason: reason,
+    });
+  }
+
+  // Log who was recommended (for dedup in daily discover)
+  for (const p of results) {
+    await sb.rpc("log_recommendation", {
+      p_device_id: device_id,
+      p_recommended_id: p.device_id,
+    });
+  }
+
+  // Persist ref map to DB
+  if (device_id && Object.keys(_refMap).length > 0) {
+    try {
+      await sb.rpc("save_scan_refs", { p_owner: device_id, p_refs: _refMap });
+    } catch { /* best effort */ }
+  }
+
+  return {
+    count: profiles.length,
+    profiles,
+    _ref_map: _refMap,
+    initial: true,
+    message: "这是你的首次推荐——基于你的名片，这几个人跟你最匹配。",
+  };
+}
+
 // ─── pass ───────────────────────────────────────────────────────────
 
 export async function pass({ device_id, target_device_id, ref, supabaseUrl, supabaseKey }) {

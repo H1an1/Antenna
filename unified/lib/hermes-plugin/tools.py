@@ -735,3 +735,81 @@ def handle_link_account(params: dict) -> str:
     data = resp.data or {}
     data["message"] = "账号已关联！现在你可以在 antenna.fyi/me 看到你的完整 profile 和匹配记录了。"
     return _ok(data)
+
+
+def handle_initial_recommendations(params: dict) -> str:
+    """Get initial recommendations for a new user (2-3 people). One-time only."""
+    sb = _sb()
+    did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
+
+    resp = sb.rpc("initial_recommendations", {
+        "p_device_id": did,
+        "p_limit": 3,
+    }).execute()
+    results = resp.data or []
+
+    if not results:
+        return _ok({"count": 0, "profiles": [], "initial": True, "message": "暂时没有推荐，等有更多人加入！"})
+
+    global _last_ref_map
+    _last_ref_map = {}
+    profiles = []
+
+    # Get my profile for match reason
+    my_prof = sb.rpc("get_profile", {"p_device_id": did}).execute()
+    my_data = my_prof.data or {}
+    my_lines = [my_data.get("line1", ""), my_data.get("line2", ""), my_data.get("line3", "")]
+
+    ref_map = {}
+    for i, p in enumerate(results):
+        ref = str(i + 1)
+        _last_ref_map[ref] = p.get("device_id")
+        ref_map[ref] = p.get("device_id")
+
+        their_lines = [p.get("line1", ""), p.get("line2", ""), p.get("line3", "")]
+
+        # Generate match reason via Edge Function
+        match_reason = None
+        try:
+            req = urllib.request.Request(
+                f"{BUILTIN_URL}/functions/v1/generate-match-reason",
+                data=json.dumps({"my_lines": my_lines, "their_lines": their_lines}).encode(),
+                headers={"Content-Type": "application/json", "Authorization": f"Bearer {BUILTIN_KEY}"},
+            )
+            res = urllib.request.urlopen(req, timeout=10)
+            body = json.loads(res.read().decode())
+            match_reason = body.get("reason")
+        except Exception:
+            pass
+
+        profile = {
+            "ref": ref,
+            "emoji": p.get("emoji") or "\ud83d\udc64",
+            "name": p.get("display_name") or "匿名",
+            "personal_description": p.get("line1"),
+            "looking_for": p.get("line2"),
+            "conversation_style": p.get("line3"),
+            "more_information": p.get("matching_context") or None,
+            "profile_slug": p.get("profile_slug") or None,
+        }
+        if match_reason:
+            profile["match_reason"] = match_reason
+        profiles.append(profile)
+
+    # Save refs and log recommendations
+    try:
+        sb.rpc("save_scan_refs", {"p_owner": did, "p_refs": ref_map}).execute()
+    except Exception:
+        pass
+    for p in results:
+        try:
+            sb.rpc("log_recommendation", {"p_device_id": did, "p_recommended_id": p["device_id"]}).execute()
+        except Exception:
+            pass
+
+    return _ok({
+        "count": len(profiles),
+        "profiles": profiles,
+        "initial": True,
+        "message": "这是你的首次推荐——基于你的名片，这几个人跟你最匹配。",
+    })

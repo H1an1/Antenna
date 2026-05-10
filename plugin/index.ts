@@ -723,6 +723,93 @@ export default function register(api: any) {
   });
 
   // ═══════════════════════════════════════════════════════════════════
+  // Tool: antenna_initial_recommendations
+  // ═══════════════════════════════════════════════════════════════════
+  api.registerTool({
+    name: "antenna_initial_recommendations",
+    description:
+      "Get initial recommendations for a new user — 2-3 people most similar to them. One-time only, does NOT consume daily discover quota. Use right after profile creation in onboarding.",
+    parameters: {
+      type: "object",
+      properties: {
+        sender_id: { type: "string", description: "The sender's user ID" },
+        channel: { type: "string", description: "The channel name" },
+        chat_id: { type: "string", description: "REQUIRED for notifications. Pass the chat/channel ID from your message context so Antenna can send you match and event notifications." },
+      },
+      required: ["sender_id", "channel", "chat_id"],
+    },
+    async execute(_id: string, params: any) {
+      const cfg = getConfig(api);
+      const supabase = getSupabase(cfg);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
+
+      const { data: results, error } = await supabase.rpc("initial_recommendations", {
+        p_device_id: deviceId,
+        p_limit: 3,
+      });
+
+      if (error) return ok({ error: error.message });
+
+      if (!results || results.length === 0) {
+        return ok({
+          count: 0,
+          profiles: [],
+          initial: true,
+          message: "暂时没有推荐，等有更多人加入！",
+        });
+      }
+
+      const _refMap: Record<string, string> = {};
+
+      // Get my profile for match reason generation
+      const { data: myProfile } = await supabase.rpc("get_profile", { p_device_id: deviceId });
+      const myLines = myProfile ? [myProfile.line1, myProfile.line2, myProfile.line3].filter(Boolean).join(". ") : "";
+
+      const profiles = [];
+      for (let i = 0; i < results.length; i++) {
+        const p = results[i] as any;
+        const ref = String(i + 1);
+        _refMap[ref] = p.device_id;
+
+        const theirLines = [p.line1, p.line2, p.line3].filter(Boolean).join(". ");
+        let match_reason: string | null = null;
+
+        if (myLines && theirLines) {
+          try {
+            const supabaseUrl = cfg.supabaseUrl || BUILTIN_SUPABASE_URL;
+            const supabaseKey = cfg.supabaseKey || BUILTIN_SUPABASE_ANON_KEY;
+            const res = await fetch(`${supabaseUrl}/functions/v1/generate-match-reason`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
+              body: JSON.stringify({ my_lines: myLines, their_lines: theirLines }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              match_reason = data?.reason || null;
+            }
+          } catch { /* best effort */ }
+        }
+
+        profiles.push({ ref, emoji: p.emoji || "👤", name: p.display_name || "匿名", personal_description: p.line1, looking_for: p.line2, conversation_style: p.line3, more_information: p.matching_context || null, profile_slug: p.profile_slug || null, match_reason });
+      }
+
+      // Persist refs + log recommendations
+      (api as any)._antennaRefMap = { ...(api as any)._antennaRefMap, ..._refMap };
+      try {
+        await supabase.rpc("save_scan_refs", { p_owner: deviceId, p_refs: _refMap });
+      } catch { /* best effort */ }
+      for (const p of results) {
+        await supabase.rpc("log_recommendation", { p_device_id: deviceId, p_recommended_id: (p as any).device_id });
+      }
+
+      return ok({
+        count: profiles.length, profiles, initial: true,
+        message: "这是你的首次推荐——基于你的名片，这几个人跟你最匹配。",
+      });
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
   // Tool: antenna_event_create
   // ═══════════════════════════════════════════════════════════════════
   api.registerTool({

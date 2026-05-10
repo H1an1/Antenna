@@ -13,6 +13,7 @@ import {
   checkin,
   createBindToken,
   discover,
+  initialRecommendations,
   createEvent,
   endEvent,
   eventCheckin,
@@ -246,6 +247,31 @@ export async function startMcpServer() {
     async ({ sender_id, channel }) => {
       try {
         const result = await discover({ device_id: deriveDeviceId(sender_id, channel) });
+        if (result._ref_map) {
+          _lastRefMap = result._ref_map;
+          const { _ref_map, ...clean } = result;
+          return jsonResult(clean);
+        }
+        return jsonResult(result);
+      } catch (e) {
+        return jsonResult({ error: e.message });
+      }
+    }
+  );
+
+  // ─── antenna_initial_recommendations ─────────────────────────
+
+  server.tool(
+    "antenna_initial_recommendations",
+    "Get initial recommendations for a new user — 2-3 people most similar to them. One-time only, does NOT consume daily discover quota. Use right after profile creation in onboarding.",
+    {
+      sender_id: z.string().describe("The sender's user ID"),
+      channel: z.string().describe("Channel name"),
+      chat_id: z.string().optional().describe("Chat/channel ID for notifications"),
+    },
+    async ({ sender_id, channel, chat_id }) => {
+      try {
+        const result = await initialRecommendations({ device_id: deriveDeviceId(sender_id, channel) });
         if (result._ref_map) {
           _lastRefMap = result._ref_map;
           const { _ref_map, ...clean } = result;

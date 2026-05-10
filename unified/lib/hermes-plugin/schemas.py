@@ -402,3 +402,21 @@ LINK_ACCOUNT_SCHEMA = {
         "required": ["sender_id", "channel", "chat_id", "user_id"],
     },
 }
+
+INITIAL_RECOMMENDATIONS_SCHEMA = {
+    "name": "antenna_initial_recommendations",
+    "description": (
+        "Get initial recommendations for a new user \u2014 2-3 people most similar to them. "
+        "One-time only, does NOT consume daily discover quota. "
+        "Use right after profile creation in onboarding."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "sender_id": {"type": "string", "description": "The sender's user ID"},
+            "channel": {"type": "string", "description": "Platform name (any platform works)"},
+            "chat_id": {"type": "string", "description": "REQUIRED for notifications. Pass chat/channel ID from message context."},
+        },
+        "required": ["sender_id", "channel", "chat_id"],
+    },
+}
