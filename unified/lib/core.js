@@ -45,6 +45,22 @@ async function generateMatchReason(myLines, theirLines) {
   } catch { return null; }
 }
 
+async function generateArchetypeReason(archetype, profileText) {
+  try {
+    const res = await fetch(`${_url || DEFAULT_URL}/functions/v1/generate-archetype`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${process.env.ANTENNA_SUPABASE_KEY || process.env.ANTENNA_KEY || DEFAULT_KEY}`,
+      },
+      body: JSON.stringify({ archetype, profile_text: profileText }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data || null;
+  } catch { return null; }
+}
+
 export function getClient(url, key) {
   const u = url || process.env.ANTENNA_SUPABASE_URL || process.env.ANTENNA_URL || DEFAULT_URL;
   const k = key || process.env.ANTENNA_SUPABASE_KEY || process.env.ANTENNA_KEY || DEFAULT_KEY;
@@ -311,12 +327,57 @@ export async function setProfile({
   // Read back profile to get slug for public page link
   let publicUrl = null;
   let bindUrl = null;
+  let archetypeResult = null;
   try {
     const profile = await getProfile({ device_id, supabaseUrl, supabaseKey });
     if (profile?.profile_slug) {
       publicUrl = `https://www.antenna.fyi/p/${profile.profile_slug}`;
     }
   } catch {}
+
+  // Generate personalized archetype description via LLM
+  try {
+    const profileText = [line1, line2, line3, matching_context].filter(Boolean).join(". ");
+    if (profileText) {
+      // Simple keyword-based archetype detection (same logic as frontend)
+      const corpus = profileText.toLowerCase();
+      const archetypeKeywords = {
+        Prometheus: ["ai", "agent", "llm", "founder", "startup", "build", "developer", "hacker", "tools", "\u667a\u80fd\u4f53", "\u521b\u4e1a", "\u5f00\u53d1"],
+        Athena: ["product", "strategy", "research", "design", "craft", "pm", "ux", "\u4ea7\u54c1", "\u8bbe\u8ba1", "\u7814\u7a76"],
+        Hermes: ["network", "connect", "community", "social", "bridge", "\u793e\u4ea4", "\u8fde\u63a5", "\u793e\u533a"],
+        Apollo: ["music", "media", "content", "creator", "writing", "taste", "\u97f3\u4e50", "\u5185\u5bb9", "\u521b\u4f5c"],
+        Artemis: ["independent", "explore", "freelance", "health", "outdoor", "\u72ec\u7acb", "\u63a2\u7d22"],
+        Aphrodite: ["beauty", "brand", "fashion", "relationship", "\u7f8e", "\u54c1\u724c", "\u65f6\u5c1a"],
+        Dionysus: ["event", "culture", "party", "art", "festival", "\u6d3b\u52a8", "\u6587\u5316", "\u827a\u672f"],
+        Hades: ["finance", "invest", "infrastructure", "backend", "security", "\u6295\u8d44", "\u91d1\u878d", "\u67b6\u6784"],
+        Persephone: ["transform", "cross", "research", "academic", "bridge", "\u8de8\u754c", "\u7814\u7a76", "\u5b66\u672f"],
+        Odysseus: ["founder", "journey", "resilience", "travel", "startup", "\u521b\u4e1a", "\u65c5\u884c"],
+      };
+      let bestArchetype = "Prometheus";
+      let bestScore = 0;
+      for (const [role, keywords] of Object.entries(archetypeKeywords)) {
+        const score = keywords.reduce((s, kw) => s + (corpus.includes(kw) ? 1 : 0), 0);
+        if (score > bestScore) { bestScore = score; bestArchetype = role; }
+      }
+      archetypeResult = await generateArchetypeReason(bestArchetype, profileText);
+      if (archetypeResult?.reason) {
+        archetypeResult.archetype = bestArchetype;
+        // Write archetype back to matching_context so dashboard can display it
+        try {
+          const profile = await getProfile({ device_id, supabaseUrl, supabaseKey });
+          let ctx = {};
+          try { ctx = JSON.parse(profile?.matching_context || "{}"); } catch {}
+          ctx.archetypeOverride = { name: bestArchetype, reason: archetypeResult.reason, reasonZh: archetypeResult.reasonZh };
+          await sb.rpc("upsert_profile", {
+            p_device_id: device_id,
+            p_matching_context: JSON.stringify(ctx),
+          });
+        } catch {}
+      }
+    }
+  } catch (e) {
+    console.error("Archetype generation failed (non-fatal):", e.message);
+  }
 
   // Auto-generate GPS bind link
   try {
@@ -328,6 +389,7 @@ export async function setProfile({
     ...data,
     public_url: publicUrl,
     gps_bind_url: bindUrl,
+    archetype: archetypeResult || null,
     next_step: "Send the public_url and gps_bind_url to the user. The GPS link should be opened on their phone to share location.",
   };
 }

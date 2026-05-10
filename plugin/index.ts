@@ -418,10 +418,48 @@ export default function register(api: any) {
 
       // Read back profile to get slug for public page link
       let publicUrl = null;
+      let archetypeResult = null;
       try {
         const { data: profile } = await supabase.rpc("get_profile", { p_device_id: deviceId });
         if (profile?.profile_slug) {
           publicUrl = `https://www.antenna.fyi/p/${profile.profile_slug}`;
+        }
+      } catch {}
+
+      // Generate personalized archetype description via LLM (best-effort)
+      try {
+        const profileText = [data.line1, data.line2, data.line3, params.matching_context].filter(Boolean).join(". ");
+        if (profileText) {
+          const corpus = profileText.toLowerCase();
+          const archetypeKw: Record<string, string[]> = {
+            Prometheus: ["ai", "agent", "llm", "founder", "startup", "build", "developer", "tools"],
+            Athena: ["product", "strategy", "research", "design", "craft", "pm", "ux"],
+            Hermes: ["network", "connect", "community", "social", "bridge"],
+            Apollo: ["music", "media", "content", "creator", "writing", "taste"],
+            Artemis: ["independent", "explore", "freelance", "health", "outdoor"],
+            Aphrodite: ["beauty", "brand", "fashion", "relationship"],
+            Dionysus: ["event", "culture", "party", "art", "festival"],
+            Hades: ["finance", "invest", "infrastructure", "backend", "security"],
+            Persephone: ["transform", "cross", "research", "academic", "bridge"],
+            Odysseus: ["founder", "journey", "resilience", "travel", "startup"],
+          };
+          let bestRole = "Prometheus"; let bestScore = 0;
+          for (const [role, kws] of Object.entries(archetypeKw)) {
+            const score = kws.reduce((s, kw) => s + (corpus.includes(kw) ? 1 : 0), 0);
+            if (score > bestScore) { bestScore = score; bestRole = role; }
+          }
+          const cfg2 = getConfig(api);
+          const supabaseUrl = cfg2.supabaseUrl || "https://bcudjloikmpcqwcptuyd.supabase.co";
+          const supabaseKey = cfg2.supabaseKey || BUILTIN_SUPABASE_ANON_KEY;
+          const res = await fetch(`${supabaseUrl}/functions/v1/generate-archetype`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
+            body: JSON.stringify({ archetype: bestRole, profile_text: profileText }),
+          });
+          if (res.ok) {
+            const archData = await res.json();
+            if (archData?.reason) archetypeResult = { archetype: bestRole, ...archData };
+          }
         }
       } catch {}
 
@@ -430,7 +468,8 @@ export default function register(api: any) {
         profile: { display_name: data.display_name,
           line1: data.line1, line2: data.line2, line3: data.line3, visible: data.visible },
         public_url: publicUrl,
-        next_step: "IMPORTANT: 1) Send the public_url to the user — this is their shareable profile link. 2) Call antenna_bind to generate a GPS link. Do not skip either step.",
+        archetype: archetypeResult || null,
+        next_step: "IMPORTANT: 1) Send the public_url to the user — this is their shareable profile link. 2) Tell the user their archetype and the personalized reason. 3) Call antenna_bind to generate a GPS link. Do not skip any step.",
       });
     },
   });
