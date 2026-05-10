@@ -608,16 +608,16 @@ export default function register(api: any) {
   api.registerTool({
     name: "antenna_link_account",
     description:
-      "Link your Antenna agent profile to your antenna.fyi website account. The user needs to provide their user_id from the dashboard (antenna.fyi/me). After linking, the dashboard will show the same profile and match history.",
+      "Link your Antenna agent profile to your antenna.fyi website account. Pass the user's API key — the server verifies it and extracts the user_id. The agent never needs to know or pass user_id directly.",
     parameters: {
       type: "object",
       properties: {
         sender_id: { type: "string", description: "The sender's user ID" },
         channel: { type: "string", description: "The channel name" },
         chat_id: { type: "string", description: "REQUIRED. Pass the chat/channel ID from your message context." },
-        user_id: { type: "string", description: "The user's antenna.fyi account UUID, visible on their dashboard" },
+        api_key: { type: "string", description: "The user's Antenna API key (ant_xxx) from antenna.fyi/me" },
       },
-      required: ["sender_id", "channel", "chat_id", "user_id"],
+      required: ["sender_id", "channel", "chat_id", "api_key"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
@@ -626,7 +626,7 @@ export default function register(api: any) {
 
       const { data, error } = await supabase.rpc("bind_user_id", {
         p_device_id: deviceId,
-        p_user_id: params.user_id,
+        p_api_key: params.api_key,
       });
       if (error) return ok({ error: error.message });
 

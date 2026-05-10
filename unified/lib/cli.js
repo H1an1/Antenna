@@ -430,17 +430,17 @@ export async function handleConfig(f) {
 export async function handleLinkAccount(f) {
   const id = resolveId(f);
   const config = loadConfig();
-  const userId = f['user-id'] || f.userId || config.user_id;
-  if (!id) return console.error("Usage: antenna link-account --id <platform>:<user_id> --user-id <antenna.fyi UUID>\n       Or: antenna link-account (uses config device_id + user_id)");
-  if (!userId) return console.error("❌ No user_id. Run 'antenna config --key <your-key>' first, or pass --user-id <UUID>.");
+  const apiKey = f['api-key'] || f.apiKey || f.key || config.key;
+  if (!id) return console.error("Usage: antenna link-account --id <device_id> --api-key <ant_xxx>\n       Or: antenna link-account (uses config device_id + key)");
+  if (!apiKey) return console.error("❌ No API key. Run 'antenna config --key <your-key>' first, or pass --api-key <key>.");
   try {
-    const result = await linkAccount({ device_id: id, user_id: userId });
+    const result = await linkAccount({ device_id: id, api_key: apiKey });
     if (result.error) {
       console.error(`\n❌ ${result.message || result.error}`);
     } else {
       console.log(`\n✅ ${result.message || 'Account linked.'}`);
       console.log(`  Device ID: ${id}`);
-      console.log(`  User ID: ${userId}\n`);
+      console.log(`  API Key: ${apiKey.slice(0, 10)}...\n`);
     }
   } catch (e) {
     console.error(`\n❌ Failed: ${e.message}`);

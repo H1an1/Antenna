@@ -917,13 +917,13 @@ export async function verifyApiKey({ key, supabaseUrl, supabaseKey }) {
   return data;
 }
 
-// ─── linkAccount (bind user_id to device_id) ─────────────────────────
+// ─── linkAccount (bind device_id to website account via API key) ─────
 
-export async function linkAccount({ device_id, user_id, supabaseUrl, supabaseKey }) {
+export async function linkAccount({ device_id, api_key, supabaseUrl, supabaseKey }) {
   const sb = getClient(supabaseUrl, supabaseKey);
   const { data, error } = await sb.rpc("bind_user_id", {
     p_device_id: device_id,
-    p_user_id: user_id,
+    p_api_key: api_key,
   });
   if (error) throw new Error(error.message);
   if (data?.error) return data;

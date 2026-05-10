@@ -85,8 +85,8 @@ openclaw cron add --every 1h --message "Check antenna matches: call antenna_chec
 ### Linking to antenna.fyi account
 
 如果用户之前通过 agent 创建过 profile(没有网站账号),现在注册了 antenna.fyi:
-1. 让用户从 antenna.fyi/me 复制 user ID
-2. 调 `antenna_link_account(user_id = "xxx")`
+1. 让用户从 antenna.fyi/me 复制 API key
+2. 调 `antenna_link_account(api_key = "ant_xxx")`
 3. 确认:"关联成功!你现在可以在 dashboard 上看到完整的 profile 和匹配记录了。"
 
 这把 agent 创建的 profile(带全部历史)关联到网站账号。

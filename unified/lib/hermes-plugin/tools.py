@@ -726,7 +726,7 @@ def handle_link_account(params: dict) -> str:
 
     resp = sb.rpc("bind_user_id", {
         "p_device_id": did,
-        "p_user_id": params["user_id"],
+        "p_api_key": params["api_key"],
     }).execute()
 
     if resp.data and resp.data.get("error"):

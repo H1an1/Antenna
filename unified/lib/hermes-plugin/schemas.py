@@ -397,9 +397,9 @@ LINK_ACCOUNT_SCHEMA = {
             "sender_id": {"type": "string", "description": "The sender's user ID"},
             "channel": {"type": "string", "description": "Platform name"},
             "chat_id": {"type": "string", "description": "REQUIRED. Pass the chat/channel ID from message context."},
-            "user_id": {"type": "string", "description": "The user's antenna.fyi account UUID, visible on their dashboard"},
+            "api_key": {"type": "string", "description": "The user's Antenna API key (ant_xxx) from antenna.fyi/me"},
         },
-        "required": ["sender_id", "channel", "chat_id", "user_id"],
+        "required": ["sender_id", "channel", "chat_id", "api_key"],
     },
 }
 

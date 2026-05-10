@@ -540,15 +540,15 @@ export async function startMcpServer() {
 
   server.tool(
     "antenna_link_account",
-    "Link your Antenna agent profile to your antenna.fyi website account. The user needs to provide their user_id from the dashboard (antenna.fyi/me). After linking, the dashboard will show the same profile and match history.",
+    "Link your Antenna agent profile to your antenna.fyi website account. Pass the user's API key — the server verifies it and extracts the user_id. The agent never needs to know or pass user_id directly.",
     {
       sender_id: z.string().describe("The sender's user ID"),
       channel: z.string().describe("Channel name"),
-      user_id: z.string().describe("The user's antenna.fyi account UUID, visible on their dashboard"),
+      api_key: z.string().describe("The user's Antenna API key (ant_xxx) from antenna.fyi/me"),
     },
-    async ({ sender_id, channel, user_id }) => {
+    async ({ sender_id, channel, api_key }) => {
       try {
-        const result = await linkAccount({ device_id: deriveDeviceId(sender_id, channel), user_id });
+        const result = await linkAccount({ device_id: deriveDeviceId(sender_id, channel), api_key });
         return jsonResult(result);
       } catch (e) { return jsonResult({ error: e.message }); }
     }
