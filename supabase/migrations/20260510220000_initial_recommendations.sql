@@ -38,3 +38,6 @@ BEGIN
   LIMIT p_limit;
 END;
 $$;
+
+-- Security: block anon direct reads
+ALTER TABLE initial_recommendations_used ENABLE ROW LEVEL SECURITY;
