@@ -66,12 +66,11 @@ export async function handleScan(f) {
 
 export async function handleProfile(f) {
   const id = resolveId(f);
-  if (!id) return console.error("Usage: antenna profile --id <platform>:<user_id> [--name Yi --emoji 🦦 --personal-description '...' --looking-for '...' --conversation-style '...'].']");
+  if (!id) return console.error("Usage: antenna profile --id <platform>:<user_id> [--name Yi --personal-description '...' --looking-for '...' --conversation-style '...'].']");
   if (f.name || f["personal-description"] || f["looking-for"] || f["conversation-style"] || f["more-information"] || f.visible !== undefined || f.hide !== undefined) {
     const visible = f.hide ? false : (f.visible !== undefined ? f.visible === 'true' || f.visible === true : undefined);
     const payload = { device_id: id };
     if (f.name) payload.display_name = f.name;
-    if (f.emoji) payload.emoji = f.emoji;
     if (f["personal-description"] !== undefined) payload.line1 = f["personal-description"];
     if (f["looking-for"] !== undefined) payload.line2 = f["looking-for"];
     if (f["conversation-style"] !== undefined) payload.line3 = f["conversation-style"];
@@ -337,7 +336,6 @@ export async function handleSetup(f) {
   if (!id) { rl.close(); return console.error("Device ID is required."); }
 
   const name = await ask("Display name: ");
-  const emoji = (await ask("Emoji (default 👤): ")) || "👤";
   const personalDesc = await ask("Personal description — who you are, what you do: ");
   const lookingFor = await ask("Looking for — the kind of people you want to meet: ");
   const convStyle = await ask("Conversation style — the type of conversations you want: ");
@@ -347,14 +345,14 @@ export async function handleSetup(f) {
   const data = await setProfile({
     device_id: id,
     display_name: name || null,
-    emoji,
+
     line1: personalDesc || null,
     line2: lookingFor || null,
     line3: convStyle || null,
   });
 
   console.log("\n✅ Profile saved!\n");
-  console.log(`  ${emoji} ${name || "Anonymous"}`);
+  console.log(`  ${name || "Anonymous"}`);
   if (personalDesc) console.log(`    ${personalDesc}`);
   if (lookingFor) console.log(`    ${lookingFor}`);
   if (convStyle) console.log(`    ${convStyle}`);
@@ -997,7 +995,7 @@ export function printHelp() {
 Usage:
   antenna scan       --lat 39.99 --lng 116.48 [--radius 500] (max 1000) [--id <platform>:<user_id>]
   antenna checkin    --id <platform>:<user_id> --lat 39.99 --lng 116.48
-  antenna profile    --id <platform>:<user_id> [--name Yi --emoji 🦦 --personal-description '...']
+  antenna profile    --id <platform>:<user_id> [--name Yi --personal-description '...']
   antenna accept     --id <platform>:<user_id> --target <ref_or_device_id> [--contact 'WeChat: yi']
   antenna pass       --id <platform>:<user_id> --target <ref_or_device_id> (or --ref 1)
   antenna matches    --id <platform>:<user_id>
