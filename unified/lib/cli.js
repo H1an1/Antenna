@@ -46,7 +46,7 @@ export async function handleScan(f) {
     console.log(`📡 ${result.count} people within ${result.radius_m}m:\n`);
   }
   result.profiles.forEach((p) => {
-    console.log(`  ${p.emoji} ${p.name}${p.distance_m != null ? ` (${Math.round(p.distance_m)}m)` : ""}`);
+    console.log(`  ${p.name}${p.distance_m != null ? ` (${Math.round(p.distance_m)}m)` : ""}`);
     if (p.personal_description) console.log(`    ${p.personal_description}`);
     if (p.looking_for) console.log(`    ${p.looking_for}`);
     if (p.conversation_style) console.log(`    ${p.conversation_style}`);
@@ -82,7 +82,7 @@ export async function handleProfile(f) {
   } else {
     const data = await getProfile({ device_id: id });
     if (!data) return console.log("No profile yet. Create one with --name and --personal-description");
-    console.log(`${data.emoji || "👤"} ${data.display_name || "Anonymous"}`);
+    console.log(`${data.display_name || "Anonymous"}`);
     if (data.personal_description) console.log(`  ${data.personal_description}`);
     if (data.looking_for) console.log(`  Looking for: ${data.looking_for}`);
     if (data.conversation_style) console.log(`  Conversation: ${data.conversation_style}`);
@@ -124,13 +124,13 @@ export async function handleMatches(f) {
     return console.log(result.message);
   }
   for (const m of result.mutual_matches) {
-    console.log(`🎉 MUTUAL: ${m.emoji} ${m.name}`);
+    console.log(`🎉 MUTUAL: ${m.name}`);
     if (m.their_contact) console.log(`   Their contact: ${m.their_contact}`);
     if (m.you_shared) console.log(`   You shared: ${m.you_shared}`);
     console.log();
   }
   for (const m of result.incoming_accepts) {
-    console.log(`📩 WANTS TO MEET YOU: ${m.emoji} ${m.name}`);
+    console.log(`📩 WANTS TO MEET YOU: ${m.name}`);
     if (m.personal_description) console.log(`   ${m.personal_description}`);
     console.log(`   Accept: antenna accept --id ${f.id} --ref ${m.ref}`);
     console.log();
@@ -144,7 +144,7 @@ export async function handleDiscover(f) {
   if (result.count === 0) return console.log(result.message || "🌍 No global recommendation available right now.");
   console.log(`🌍 Global discover:\n`);
   result.profiles.forEach((p) => {
-    console.log(`  ${p.emoji} ${p.name}`);
+    console.log(`  ${p.name}`);
     if (p.personal_description) console.log(`    ${p.personal_description}`);
     if (p.looking_for) console.log(`    ${p.looking_for}`);
     if (p.conversation_style) console.log(`    ${p.conversation_style}`);
@@ -231,7 +231,7 @@ export async function handleEvent(f) {
       const badge = p.checked_in ? " ✅" : "";
       const creatorTag = p.role === "creator" ? " [主办]" : "";
       const statusTag = p.status === "pending" ? " 🟡待审批" : "";
-      console.log(`  ${p.emoji} ${p.name}${creatorTag}${badge}${statusTag}`);
+      console.log(`  ${p.name}${creatorTag}${badge}${statusTag}`);
       if (p.personal_description) console.log(`    ${p.personal_description}`);
       if (p.application_context) console.log(`    📝 ${p.application_context}`);
       console.log(`    ref: ${p.ref}\n`);
@@ -467,7 +467,7 @@ export async function handleStatus(f) {
   if (f.id) {
     const profile = await getProfile({ device_id: f.id });
     if (profile) {
-      console.log(`  Profile: ✅ ${profile.emoji || "👤"} ${profile.display_name || "Anonymous"}`);
+      console.log(`  Profile: ✅ ${profile.display_name || "Anonymous"}`);
     } else {
       console.log("  Profile: ❌ Not created yet");
     }
@@ -777,7 +777,7 @@ export async function handleWatch(f) {
     for (const m of initial.mutual_matches) {
       const key = `mutual:${m._device_id}`;
       notified.add(key);
-      _log(`   ${m.emoji || "👤"} ${m.name}${m.their_contact ? " — contact: " + m.their_contact : ""}`);
+      _log(`   ${m.name}${m.their_contact ? " — contact: " + m.their_contact : ""}`);
     }
     saveNotified(notified);
     _log("");
@@ -787,7 +787,7 @@ export async function handleWatch(f) {
     for (const m of initial.incoming_accepts) {
       const key = `incoming:${m._device_id}`;
       notified.add(key);
-      _log(`   ${m.emoji || "👤"} ${m.name} — ${m.personal_description || ""}`);
+      _log(`   ${m.name} — ${m.personal_description || ""}`);
     }
     saveNotified(notified);
     _log("");
@@ -820,7 +820,6 @@ export async function handleWatch(f) {
 
             const profile = await getProfile({ device_id: row.device_id_a });
             const name = profile?.display_name || "Someone";
-            const emoji = profile?.emoji || "👤";
 
             // Check if mutual
             const matches = await checkMatches({ device_id: id });
@@ -831,11 +830,11 @@ export async function handleWatch(f) {
               notified.add(mutualKey);
               saveNotified(notified);
               const contact = row.contact_info_a;
-              pushNotify(`🎉 MUTUAL MATCH! ${emoji} ${name} also accepted you!${contact ? " Contact: " + contact : ""}`);
+              pushNotify(`🎉 MUTUAL MATCH! ${name} also accepted you!${contact ? " Contact: " + contact : ""}`);
             } else {
               notified.add(key);
               saveNotified(notified);
-              pushNotify(`📩 ${emoji} ${name} wants to meet you! Use 'antenna matches --id ${id}' to respond.`);
+              pushNotify(`📩 ${name} wants to meet you! Use 'antenna matches --id ${id}' to respond.`);
             }
           }
 
@@ -848,7 +847,7 @@ export async function handleWatch(f) {
               if (!notified.has(mutualKey)) {
                 notified.add(mutualKey);
                 saveNotified(notified);
-                pushNotify(`🎉 MUTUAL MATCH! ${mutual.emoji || "👤"} ${mutual.name}!${mutual.their_contact ? " Contact: " + mutual.their_contact : ""}`);
+                pushNotify(`🎉 MUTUAL MATCH! ${mutual.name}!${mutual.their_contact ? " Contact: " + mutual.their_contact : ""}`);
               }
             }
           }
@@ -895,8 +894,7 @@ export async function handleWatch(f) {
           if (!event?.found || event.created_by !== id) return;
           const applicant = await getProfile({ device_id: row.device_id });
           const name = applicant?.display_name || "Someone";
-          const emoji = applicant?.emoji || "👤";
-          pushNotify(`📩 ${emoji} ${name} applied to join \"${event.name}\"! Run: antenna event --scan --code ${event.code} --id ${id}`);
+          pushNotify(`📩 ${name} applied to join \"${event.name}\"! Run: antenna event --scan --code ${event.code} --id ${id}`);
         } catch {}
       }
     )
@@ -935,7 +933,7 @@ export async function handleWatch(f) {
         if (!notified.has(key)) {
           notified.add(key);
           saveNotified(notified);
-          pushNotify(`🎉 MUTUAL MATCH! ${m.emoji || "👤"} ${m.name}!${m.their_contact ? " Contact: " + m.their_contact : ""}`);
+          pushNotify(`🎉 MUTUAL MATCH! ${m.name}!${m.their_contact ? " Contact: " + m.their_contact : ""}`);
         }
       }
       for (const m of (result.incoming_accepts || [])) {
@@ -943,7 +941,7 @@ export async function handleWatch(f) {
         if (!notified.has(key)) {
           notified.add(key);
           saveNotified(notified);
-          pushNotify(`📩 ${m.emoji || "👤"} ${m.name} wants to meet you!`);
+          pushNotify(`📩 ${m.name} wants to meet you!`);
         }
       }
     } catch { /* silent */ }
@@ -974,7 +972,7 @@ export async function handleWatch(f) {
           notified.add(key);
           saveNotified(notified);
           const role = msg.sender_role === 'creator' ? '组织者' : '协办';
-          pushNotify(`📢 来自「${msg.event_name}」${role} ${msg.sender_emoji || ''} ${msg.sender_name}: ${msg.message}`);
+          pushNotify(`📢 来自「${msg.event_name}」${role} ${msg.sender_name}: ${msg.message}`);
         }
       }
     } catch { /* silent */ }

@@ -65,14 +65,14 @@ export async function startMcpServer() {
         const key = `mutual:${m.device_id}`;
         if (!_notifiedMatches.has(key)) {
           _notifiedMatches.add(key);
-          notifications.push(`🎉 双向匹配！${m.emoji || "👤"} ${m.name} 也接受了你！${m.their_contact ? "联系方式：" + m.their_contact : ""}`);
+          notifications.push(`🎉 双向匹配！${m.name} 也接受了你！${m.their_contact ? "联系方式：" + m.their_contact : ""}`);
         }
       }
       for (const m of (matches.incoming_accepts || [])) {
         const key = `incoming:${m.device_id}`;
         if (!_notifiedMatches.has(key)) {
           _notifiedMatches.add(key);
-          notifications.push(`📩 ${m.emoji || "👤"} ${m.name} 想认识你！用 antenna_check_matches 查看详情。`);
+          notifications.push(`📩 ${m.name} 想认识你！用 antenna_check_matches 查看详情。`);
         }
       }
 

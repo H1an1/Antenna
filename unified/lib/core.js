@@ -121,7 +121,6 @@ export async function scan({ lat, lng, radius_m = 500, device_id, supabaseUrl, s
     return {
       ref,
       name: p.display_name || "匿名",
-      emoji: p.emoji || "👤",
       personal_description: p.line1,
       looking_for: p.line2,
       conversation_style: p.line3,
@@ -247,7 +246,6 @@ export async function getProfile({ device_id, supabaseUrl, supabaseKey }) {
 export async function setProfile({
   device_id,
   display_name,
-  emoji,
   line1,
   line2,
   line3,
@@ -297,7 +295,7 @@ export async function setProfile({
   const { data, error } = await sb.rpc("upsert_profile", {
     p_device_id: device_id,
     p_display_name: display_name || null,
-    p_emoji: emoji || null,
+    p_emoji: null,
     p_line1: line1 || null,
     p_line2: line2 || null,
     p_line3: line3 || null,
@@ -502,7 +500,6 @@ export async function checkMatches({ device_id, supabaseUrl, supabaseKey }) {
     ref: String(i + 1),
     _device_id: m.target_id,
     name: m.name || "匿名",
-    emoji: m.emoji || "👤",
     personal_description: m.line1,
     looking_for: m.line2,
     conversation_style: m.line3,
@@ -515,7 +512,6 @@ export async function checkMatches({ device_id, supabaseUrl, supabaseKey }) {
     ref: String(incomingOffset + i + 1),
     _device_id: m.target_id,
     name: m.name || "匿名",
-    emoji: m.emoji || "👤",
     personal_description: m.line1,
     looking_for: m.line2,
     conversation_style: m.line3,
@@ -587,7 +583,6 @@ export async function discover({ device_id, supabaseUrl, supabaseKey }) {
     profiles.push({
       ref,
       name: p.display_name || "匿名",
-      emoji: p.emoji || "👤",
       personal_description: p.line1,
       looking_for: p.line2,
       conversation_style: p.line3,
@@ -662,7 +657,6 @@ export async function initialRecommendations({ device_id, supabaseUrl, supabaseK
     profiles.push({
       ref,
       name: p.display_name || "匿名",
-      emoji: p.emoji || "👤",
       personal_description: p.line1,
       looking_for: p.line2,
       conversation_style: p.line3,
@@ -855,7 +849,6 @@ export async function eventScan({ code, device_id, supabaseUrl, supabaseKey }) {
     return {
       ref,
       name: p.display_name || "匿名",
-      emoji: p.emoji || "👤",
       personal_description: p.line1,
       looking_for: p.line2,
       conversation_style: p.line3,
