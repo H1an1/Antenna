@@ -265,7 +265,8 @@ export async function setProfile({
 
   // Pack structured fields into matching_context JSON
   let contextJson = matching_context;
-  if (matching_context || interest_tags || city || links || is_active !== undefined || archetype_override !== undefined) {
+  const needsContextPack = matching_context || interest_tags || city || links || is_active !== undefined || archetype_override !== undefined || (line1 && !matching_context) || (line2 && !matching_context) || (line3 && !matching_context);
+  if (needsContextPack) {
     // Read existing context from DB to merge
     let existing = {};
     try {
@@ -283,6 +284,10 @@ export async function setProfile({
       } catch {
         existing.context = matching_context;
       }
+    }
+    // If no explicit context but lines are being set, auto-generate context from lines
+    if (!matching_context && !existing.context && (line1 || line2 || line3)) {
+      existing.context = [line1, line2, line3].filter(Boolean).join(". ");
     }
     if (interest_tags) existing.interestTags = interest_tags;
     if (city) existing.city = city;

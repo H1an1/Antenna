@@ -66,7 +66,7 @@ export async function handleScan(f) {
 
 export async function handleProfile(f) {
   const id = resolveId(f);
-  if (!id) return console.error("Usage: antenna profile --id <platform>:<user_id> [--name Yi --personal-description '...' --looking-for '...' --conversation-style '...' --hide --visible true]");
+  if (!id) return console.error("Usage: antenna profile --id <platform>:<user_id> [--name Yi --personal-description '...' --looking-for '...' --conversation-style '...' --more-information '...' --contact 'WeChat: yi' --slug mira --hide --visible true]");
   if (f.name || f["personal-description"] !== undefined || f.line1 !== undefined || f["looking-for"] !== undefined || f.line2 !== undefined || f["conversation-style"] !== undefined || f.line3 !== undefined || f["more-information"] !== undefined || f.contact !== undefined || f.slug !== undefined || f.visible !== undefined || f.hide !== undefined) {
     const visible = f.hide ? false : (f.visible !== undefined ? f.visible === 'true' || f.visible === true : undefined);
     const payload = { device_id: id };
@@ -1075,7 +1075,7 @@ export function printHelp() {
 Usage:
   antenna scan       --lat 39.99 --lng 116.48 [--radius 500] (max 1000) [--id <platform>:<user_id>]
   antenna checkin    --id <platform>:<user_id> --lat 39.99 --lng 116.48
-  antenna profile    --id <platform>:<user_id> [--name Yi --personal-description '...' --looking-for '...' --conversation-style '...' --contact 'WeChat: yi' --hide --visible true]
+  antenna profile    --id <platform>:<user_id> [--name Yi --personal-description '...' --looking-for '...' --conversation-style '...' --more-information '...' --contact 'WeChat: yi' --slug mira --hide --visible true]
   antenna accept     --id <platform>:<user_id> --target <ref_or_device_id> [--contact 'WeChat: yi']
   antenna pass       --id <platform>:<user_id> --target <ref_or_device_id> (or --ref 1)
   antenna matches    --id <platform>:<user_id>
