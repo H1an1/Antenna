@@ -290,7 +290,7 @@ export async function setProfile({
     if (!matching_context && !existing.context && (line1 || line2 || line3)) {
       existing.context = [line1, line2, line3].filter(Boolean).join(". ");
     }
-    if (interest_tags) existing.interestTags = interest_tags;
+    if (interest_tags) existing.interestTags = interest_tags.slice(0, 5);
     if (city) existing.city = city;
     if (links) existing.links = links;
     if (is_active !== undefined) existing.isActive = is_active;
@@ -356,7 +356,7 @@ export async function setProfile({
     if (profileText) {
       const archRes = await fetch(`${_url || DEFAULT_URL}/functions/v1/generate-archetype`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${_key || DEFAULT_KEY}` },
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${process.env.ANTENNA_SUPABASE_KEY || process.env.ANTENNA_KEY || DEFAULT_KEY}` },
         body: JSON.stringify({ profile_text: profileText }),
       });
       if (archRes.ok) {

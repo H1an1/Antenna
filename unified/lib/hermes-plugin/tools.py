@@ -122,7 +122,6 @@ def handle_scan(params: dict) -> str:
         _last_ref_map[ref] = p.get("device_id")
         profiles.append({
             "ref": ref,
-            "emoji": p.get("emoji") or "👤",
             "name": p.get("display_name") or "匿名",
             "line1": p.get("line1"),
             "line2": p.get("line2"),
@@ -154,14 +153,14 @@ def handle_profile(params: dict) -> str:
     if params["action"] == "get":
         resp = sb.rpc("get_profile", {"p_device_id": did}).execute()
         if not resp.data:
-            return _ok({"exists": False, "message": "你还没有名片。告诉我你的名字、emoji、三句话，我帮你创建。"})
+            return _ok({"exists": False, "message": "你还没有名片。告诉我你是谁、做什么、想认识什么人，我帮你创建。"})
         return _ok({"exists": True, "profile": resp.data})
 
     # set
     rpc_params = {
         "p_device_id": did,
         "p_display_name": params.get("display_name"),
-        "p_emoji": params.get("emoji"),
+        "p_emoji": None,
         "p_line1": params.get("line1"),
         "p_line2": params.get("line2"),
         "p_line3": params.get("line3"),
@@ -271,7 +270,6 @@ def handle_check_matches(params: dict) -> str:
             "ref": str(i + 1),
             "_device_id": m.get("target_id"),
             "name": m.get("name") or "匿名",
-            "emoji": m.get("emoji") or "👤",
             "their_contact": m.get("their_contact"),
             "you_shared": m.get("you_shared"),
         })
@@ -282,7 +280,6 @@ def handle_check_matches(params: dict) -> str:
             "ref": str(len(mutual) + i + 1),
             "_device_id": m.get("target_id"),
             "name": m.get("name") or "匿名",
-            "emoji": m.get("emoji") or "👤",
             "line1": m.get("line1"),
             "line2": m.get("line2"),
             "line3": m.get("line3"),
@@ -389,7 +386,6 @@ def handle_discover(params: dict) -> str:
 
         profile = {
             "ref": ref,
-            "emoji": p.get("emoji") or "\ud83d\udc64",
             "name": p.get("display_name") or "匿名",
             "line1": p.get("line1"),
             "line2": p.get("line2"),
@@ -563,7 +559,6 @@ def handle_event_scan(params: dict) -> str:
             checked_in_count += 1
         profiles.append({
             "ref": ref,
-            "emoji": p.get("emoji") or "👤",
             "name": p.get("display_name") or "匿名",
             "line1": p.get("line1"),
             "line2": p.get("line2"),
@@ -784,7 +779,6 @@ def handle_initial_recommendations(params: dict) -> str:
 
         profile = {
             "ref": ref,
-            "emoji": p.get("emoji") or "\ud83d\udc64",
             "name": p.get("display_name") or "匿名",
             "personal_description": p.get("line1"),
             "looking_for": p.get("line2"),

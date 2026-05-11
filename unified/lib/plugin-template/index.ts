@@ -25,7 +25,6 @@ interface Profile {
   line1: string | null;
   line2: string | null;
   line3: string | null;
-  emoji: string | null;
   visible: boolean;
   last_seen_at?: string;
 }
@@ -33,7 +32,6 @@ interface Profile {
 interface MatchResult {
   device_id: string;
   display_name: string | null;
-  emoji: string | null;
   line1: string | null;
   line2: string | null;
   line3: string | null;
@@ -268,7 +266,6 @@ export default function register(api: any) {
       return ok({
         nearby: others.map((p: Profile) => ({
           device_id: p.device_id,
-          emoji: p.emoji || "👤",
           name: p.display_name || "匿名",
           line1: p.line1,
           line2: p.line2,
@@ -287,7 +284,7 @@ export default function register(api: any) {
   api.registerTool({
     name: "antenna_profile",
     description:
-      "View or update the user's Antenna profile (name card). The profile has a display name, emoji, and three lines describing who they are.",
+      "View or update the user's Antenna profile (name card). The profile has a display name and three lines describing who they are.",
     parameters: {
       type: "object",
       properties: {
@@ -295,7 +292,6 @@ export default function register(api: any) {
         sender_id: { type: "string", description: "The sender's user ID" },
         channel: { type: "string", description: "The channel name" },
         display_name: { type: "string", description: "Display name" },
-        emoji: { type: "string", description: "Profile emoji" },
         line1: { type: "string", description: "First line (who you are / what you do)" },
         line2: { type: "string", description: "Second line (what you're into)" },
         line3: { type: "string", description: "Third line (what you're looking for)" },
@@ -311,18 +307,18 @@ export default function register(api: any) {
       if (params.action === "get") {
         const { data, error } = await supabase.rpc("get_profile", { p_device_id: deviceId });
         if (error || !data) {
-          return ok({ exists: false, message: "你还没有名片。告诉我你的名字、一个 emoji、和三句话介绍自己，我帮你创建。" });
+          return ok({ exists: false, message: "你还没有名片。告诉我你是谁、做什么、想认识什么人，我帮你创建。" });
         }
         return ok({
           exists: true,
-          profile: { display_name: data.display_name, emoji: data.emoji,
+          profile: { display_name: data.display_name,
             line1: data.line1, line2: data.line2, line3: data.line3, visible: data.visible },
         });
       }
 
       const { data, error } = await supabase.rpc("upsert_profile", {
         p_device_id: deviceId,
-        p_display_name: params.display_name ?? null, p_emoji: params.emoji ?? null,
+        p_display_name: params.display_name ?? null, p_emoji: null,
         p_line1: params.line1 ?? null, p_line2: params.line2 ?? null,
         p_line3: params.line3 ?? null, p_visible: params.visible ?? true,
       });
@@ -331,7 +327,7 @@ export default function register(api: any) {
 
       return ok({
         updated: true,
-        profile: { display_name: data.display_name, emoji: data.emoji,
+        profile: { display_name: data.display_name,
           line1: data.line1, line2: data.line2, line3: data.line3, visible: data.visible },
       });
     },
@@ -366,7 +362,7 @@ export default function register(api: any) {
       if (!profile) {
         return ok({
           checked_in: false,
-          message: "你还没有名片，别人看到你也不知道你是谁。先创建一个名片吧（告诉我你的名字、emoji、三句话介绍自己）。",
+          message: "你还没有名片，别人看到你也不知道你是谁。先创建一个名片吧（告诉我你是谁、做什么、想认识什么人）。",
         });
       }
 
@@ -493,7 +489,7 @@ export default function register(api: any) {
           const { data: profile } = await supabase.rpc("get_profile", { p_device_id: match.device_id_b });
           mutualMatches.push({
             device_id: match.device_id_b,
-            name: profile?.display_name || "匿名", emoji: profile?.emoji || "👤",
+            name: profile?.display_name || "匿名",
             line1: profile?.line1, line2: profile?.line2, line3: profile?.line3,
             their_contact: reverse.contact_info_a || null, you_shared: match.contact_info_a || null,
           });
@@ -511,7 +507,7 @@ export default function register(api: any) {
           const { data: profile } = await supabase.rpc("get_profile", { p_device_id: match.device_id_a });
           incomingAccepts.push({
             device_id: match.device_id_a,
-            name: profile?.display_name || "匿名", emoji: profile?.emoji || "👤",
+            name: profile?.display_name || "匿名",
             line1: profile?.line1, line2: profile?.line2, line3: profile?.line3,
           });
         }
@@ -587,11 +583,10 @@ export default function register(api: any) {
                 if (reverse) {
                   const { data: theirProfile } = await supabase.rpc("get_profile", { p_device_id: match.device_id_b });
                   const name = theirProfile?.display_name || "对方";
-                  const emoji = theirProfile?.emoji || "👤";
                   const contact = reverse.contact_info_a ? `\n对方的联系方式：${reverse.contact_info_a}` : "";
                   notifyUser(
                     channel, userId,
-                    `[Antenna] 🎉 双向匹配成功！${emoji} ${name} 也接受了你！${contact}\n\n用 antenna_check_matches 查看详情。`,
+                    `[Antenna] 🎉 双向匹配成功！${name} 也接受了你！${contact}\n\n用 antenna_check_matches 查看详情。`,
                     logger,
                   );
                   // Clean up follow-up crons
@@ -601,14 +596,13 @@ export default function register(api: any) {
                 // Someone new accepted me
                 const { data: theirProfile } = await supabase.rpc("get_profile", { p_device_id: match.device_id_a });
                 const name = theirProfile?.display_name || "有人";
-                const emoji = theirProfile?.emoji || "👤";
                 const iAccepted = myMatches.find((m: any) => m.device_id_b === match.device_id_a);
                 if (iAccepted) {
                   // I already accepted them → mutual!
                   const contact = match.contact_info_a ? `\n对方的联系方式：${match.contact_info_a}` : "";
                   notifyUser(
                     channel, userId,
-                    `[Antenna] 🎉 双向匹配成功！${emoji} ${name} 也接受了你！${contact}\n\n用 antenna_check_matches 查看详情。`,
+                    `[Antenna] 🎉 双向匹配成功！${name} 也接受了你！${contact}\n\n用 antenna_check_matches 查看详情。`,
                     logger,
                   );
                   stopFollowUpCron(deviceId, match.device_id_a, logger);
@@ -616,7 +610,7 @@ export default function register(api: any) {
                   // They accepted me but I haven't responded
                   notifyUser(
                     channel, userId,
-                    `[Antenna] 📩 ${emoji} ${name} 想认识你！看看 TA 的名片，决定要不要接受？\n\n用 antenna_check_matches 查看详情。`,
+                    `[Antenna] 📩 ${name} 想认识你！看看 TA 的名片，决定要不要接受？\n\n用 antenna_check_matches 查看详情。`,
                     logger,
                   );
                 }
