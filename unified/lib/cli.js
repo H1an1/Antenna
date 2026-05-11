@@ -81,8 +81,21 @@ export async function handleProfile(f) {
     if (f.contact !== undefined) payload.contact_info = f.contact;
     if (visible !== undefined) payload.visible = visible;
     const data = await setProfile(payload);
+    if (data?.error) {
+      console.error("❌ " + data.error);
+      return;
+    }
     console.log("✅ Profile saved");
-    console.log(JSON.stringify(data, null, 2));
+    if (data?.display_name) console.log(`  ${data.display_name}`);
+    if (data?.personal_description) console.log(`  ${data.personal_description}`);
+    if (data?.looking_for) console.log(`  Looking for: ${data.looking_for}`);
+    if (data?.conversation_style) console.log(`  Conversation: ${data.conversation_style}`);
+    if (data?.contact_info) console.log(`  📇 Contact: ${data.contact_info}`);
+    if (data?.public_url) console.log(`  🔗 ${data.public_url}`);
+    else if (data?.profile_slug) console.log(`  🔗 https://www.antenna.fyi/p/${data.profile_slug}`);
+    if (data?.warnings?.length) {
+      for (const w of data.warnings) console.log(`  ⚠️  ${w}`);
+    }
   } else {
     const data = await getProfile({ device_id: id });
     if (!data) return console.log("No profile yet. Create one with --name and --personal-description");
@@ -90,9 +103,6 @@ export async function handleProfile(f) {
     if (data.personal_description) console.log(`  ${data.personal_description}`);
     if (data.looking_for) console.log(`  Looking for: ${data.looking_for}`);
     if (data.conversation_style) console.log(`  Conversation: ${data.conversation_style}`);
-    if (data.line1 && data.line1 !== data.personal_description) console.log(`  Line 1: ${data.line1}`);
-    if (data.line2 && data.line2 !== data.looking_for) console.log(`  Line 2: ${data.line2}`);
-    if (data.line3 && data.line3 !== data.conversation_style) console.log(`  Line 3: ${data.line3}`);
     if (data.interest_tags?.length) console.log(`  Tags: ${data.interest_tags.join(", ")}`);
     if (data.city) console.log(`  📍 ${data.city}`);
     if (data.contact_info) console.log(`  📇 Contact: ${data.contact_info}`);

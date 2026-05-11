@@ -335,9 +335,8 @@ export async function setProfile({
     if (!profileSlug && display_name) {
       const slug = display_name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").substring(0, 30);
       if (slug) {
-        const { error: slugError } = await sb.from("profiles").update({ profile_slug: slug }).eq("device_id", device_id);
-        if (slugError) throw new Error(slugError.message);
-        profileSlug = slug;
+        const { data: slugResult } = await sb.rpc("set_profile_slug", { p_device_id: device_id, p_slug: slug });
+        if (slugResult?.set) profileSlug = slug;
       }
     }
     if (profileSlug) {
