@@ -258,6 +258,7 @@ export async function setProfile({
   profile_slug,
   is_active,
   archetype_override,
+  api_key,
   supabaseUrl,
   supabaseKey,
 }) {
@@ -308,6 +309,7 @@ export async function setProfile({
     p_visible: visible,
     p_matching_context: contextJson || null,
     p_contact_info: contact_info || null,
+    ...(api_key ? { p_api_key: api_key } : {}),
   });
   if (error) throw new Error(error.message);
 

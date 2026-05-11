@@ -80,7 +80,9 @@ export async function handleProfile(f) {
     if (f["more-information"] !== undefined) payload.matching_context = f["more-information"];
     if (f.contact !== undefined) payload.contact_info = f.contact;
     if (f.slug !== undefined) payload.profile_slug = f.slug;
-    if (visible !== undefined) payload.visible = visible;
+        if (visible !== undefined) payload.visible = visible;
+    const config = loadConfig();
+    if (config.key) payload.api_key = config.key;
     const data = await setProfile(payload);
     if (data?.error) {
       console.error("❌ " + data.error);
