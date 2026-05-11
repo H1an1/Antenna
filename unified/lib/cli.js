@@ -1,6 +1,6 @@
 // antenna CLI command handlers
 
-import { scan, getProfile, setProfile, accept, checkMatches, checkin, createBindToken, discover, createEvent, endEvent, eventCheckin, joinEvent, eventScan, pass as passUser, uploadEventImage, updateEvent, approveParticipant, rejectParticipant, addCohost, sendEventMessage, getMyEventMessages, getClient, verifyApiKey, linkAccount, initialRecommendations } from "./core.js";
+import { scan, getProfile, setProfile, accept, checkMatches, checkin, createBindToken, discover, createEvent, endEvent, eventCheckin, joinEvent, eventScan, pass as passUser, uploadEventImage, updateEvent, approveParticipant, rejectParticipant, addCohost, sendEventMessage, getMyEventMessages, getClient, verifyApiKey, linkAccount, initialRecommendations, throwDriftBottle, pickDriftBottle, replyDriftBottle, checkDriftBottles, getMyBottles } from "./core.js";
 import { createInterface } from "readline";
 import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync, unlinkSync, renameSync } from "fs";
 import path from "path";
@@ -989,6 +989,67 @@ export async function handleWatch(f) {
   });
 }
 
+export async function handleDrift(f) {
+  const id = resolveId(f);
+  if (!id) return console.error("Usage: antenna drift --id <platform>:<user_id> --throw --message 'hello'");
+
+  if (f.throw) {
+    if (!f.message) return console.error("Usage: antenna drift --throw --message 'your message' --id <platform>:<user_id>");
+    const result = await throwDriftBottle({ device_id: id, message: f.message });
+    if (result.error) return console.error(`❌ ${result.error}`);
+    console.log("🍾 漂流瓶已丢入海中！");
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  if (f.pick) {
+    const result = await pickDriftBottle({ device_id: id });
+    if (result.error) return console.error(`❌ ${result.error}`);
+    if (!result.bottle_id) return console.log(result.message || "🌊 海上没有漂流瓶了。");
+    console.log(`🍾 捡到一个漂流瓶！\n`);
+    console.log(`  ${result.message}\n`);
+    console.log(`  回复: antenna drift --reply --bottle-id ${result.bottle_id} --message '你的回复' --id ${id}`);
+    return;
+  }
+
+  if (f.reply) {
+    if (!f['bottle-id'] || !f.message) return console.error("Usage: antenna drift --reply --bottle-id <uuid> --message 'your reply' --id <platform>:<user_id>");
+    const result = await replyDriftBottle({ bottle_id: f['bottle-id'], device_id: id, reply: f.message });
+    if (result.error) return console.error(`❌ ${result.error}`);
+    console.log("💬 回复已漂回给丢瓶子的人！");
+    return;
+  }
+
+  if (f.check) {
+    const result = await checkDriftBottles({ device_id: id });
+    if (result.error) return console.error(`❌ ${result.error}`);
+    console.log(JSON.stringify(result, null, 2));
+    return;
+  }
+
+  if (f['my-bottles']) {
+    const result = await getMyBottles({ device_id: id });
+    if (result.error) return console.error(`❌ ${result.error}`);
+    const bottles = Array.isArray(result) ? result : (result.bottles || []);
+    if (bottles.length === 0) return console.log("🌊 你还没丢过漂流瓶。");
+    console.log(`🍾 你的漂流瓶 (${bottles.length}):\n`);
+    for (const b of bottles) {
+      const status = b.reply ? "💬 已回复" : b.picked_by ? "👀 被捡起" : "🌊 漂流中";
+      console.log(`  ${status} — ${b.message}`);
+      if (b.reply) console.log(`    ↩ ${b.reply}`);
+      console.log();
+    }
+    return;
+  }
+
+  console.log(`Usage:
+  antenna drift --throw --message 'hello' --id <platform>:<user_id>
+  antenna drift --pick --id <platform>:<user_id>
+  antenna drift --reply --bottle-id <uuid> --message 'reply' --id <platform>:<user_id>
+  antenna drift --check --id <platform>:<user_id>
+  antenna drift --my-bottles --id <platform>:<user_id>`);
+}
+
 export function printHelp() {
   console.log(`📡 Antenna — nearby people discovery
 
@@ -1001,6 +1062,7 @@ Usage:
   antenna matches    --id <platform>:<user_id>
   antenna discover   --id <platform>:<user_id>
   antenna event      --create --name 'AI Meetup' --starts-at '...' --ends-at '...' [--lat 34.05 --lng -118.25] [--desc '...'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2'] | --join --code abc123 | --scan --code abc123 | --end --code abc123 --id <platform>:<user_id> | --upload-image --code abc123 --file /path/to/image.png | --update --code abc123 --name 'New Name' | --approve --code abc123 --ref 1 | --reject --code abc123 --ref 1 | --add-host --code abc123 --ref 1
+  antenna drift      --throw --message 'hello' | --pick | --reply --bottle-id <uuid> --message 'reply' | --check | --my-bottles  --id <platform>:<user_id>
   antenna watch       --id <platform>:<user_id> [--push hermes|openclaw|terminal]  Watch for new matches in real-time (Ctrl+C to stop)
   antenna bind       --id <platform>:<user_id>
   antenna serve      Start MCP server (stdio transport)

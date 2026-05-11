@@ -371,6 +371,7 @@ export async function setProfile({
           await sb.rpc("upsert_profile", {
             p_device_id: device_id,
             p_matching_context: JSON.stringify(ctx),
+            p_visible: profile?.visible ?? true,
           });
         } catch {}
       }
@@ -993,4 +994,41 @@ export async function linkAccount({ device_id, api_key, supabaseUrl, supabaseKey
     ...data,
     message: "账号已关联！现在你可以在 antenna.fyi/me 看到你的完整 profile 和匹配记录了。",
   };
+}
+
+// ─── Drift Bottle (漂流瓶) ──────────────────────────────────────────
+
+export async function throwDriftBottle({ device_id, message }) {
+  const sb = getClient();
+  const { data, error } = await sb.rpc("throw_drift_bottle", { p_device_id: device_id, p_message: message });
+  if (error) return { error: error.message };
+  return data;
+}
+
+export async function pickDriftBottle({ device_id }) {
+  const sb = getClient();
+  const { data, error } = await sb.rpc("pick_drift_bottle", { p_device_id: device_id });
+  if (error) return { error: error.message };
+  return data;
+}
+
+export async function replyDriftBottle({ bottle_id, device_id, reply }) {
+  const sb = getClient();
+  const { data, error } = await sb.rpc("reply_drift_bottle", { p_bottle_id: bottle_id, p_device_id: device_id, p_reply: reply });
+  if (error) return { error: error.message };
+  return data;
+}
+
+export async function checkDriftBottles({ device_id }) {
+  const sb = getClient();
+  const { data, error } = await sb.rpc("check_drift_bottles", { p_device_id: device_id });
+  if (error) return { error: error.message };
+  return data;
+}
+
+export async function getMyBottles({ device_id }) {
+  const sb = getClient();
+  const { data, error } = await sb.rpc("get_my_bottles", { p_device_id: device_id });
+  if (error) return { error: error.message };
+  return data;
 }

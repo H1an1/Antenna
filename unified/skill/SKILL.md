@@ -63,17 +63,17 @@ Plugin 安装后,agent **主动**开始引导,不要等用户问。
 名片存好后,**立刻**调 `antenna_initial_recommendations` 获取首次推荐:
 > "名片存好了!我先帮你看看有谁跟你特别像--"
 
-这是一次性的首次推荐（不消耗每日 discover 额度）。如果返回空，说明还没有足够的用户——跳过这步。
+这是一次性的首次推荐(不消耗每日 discover 额度)。如果返回空,说明还没有足够的用户--跳过这步。
 
-**第四步：发公开链接给用户**
+**第四步:发公开链接给用户**
 
-Profile 存好后，返回里会有 `public_url`（如 `antenna.fyi/p/yi`）。**必须发给用户：**
-> "这是你的公开名片链接：[public_url]
-> 你可以把它发给别人，对方的 agent 看到链接就能直接 accept 你。"
+Profile 存好后,返回里会有 `public_url`(如 `antenna.fyi/p/yi`)。**必须发给用户:**
+> "这是你的公开名片链接:[public_url]
+> 你可以把它发给别人,对方的 agent 看到链接就能直接 accept 你。"
 
-**第五步：调 antenna_bind 获取 GPS 链接**
+**第五步:调 antenna_bind 获取 GPS 链接**
 
-**强制。** 名片存好后**必须立刻**调用 `antenna_bind` 生成链接并发给用户：
+**强制。** 名片存好后**必须立刻**调用 `antenna_bind` 生成链接并发给用户:
 > "点这个链接,在手机浏览器打开,允许定位就行:[链接]"
 
 GPS 不是 Antenna 的唯一入口,但它开启了附近发现的能力。
@@ -283,7 +283,62 @@ Plugin 后台每 10 分钟查一次新匹配。看到 `[Antenna] 🎉` 时:
 
 ## Events
 
-详见 EVENTS.md。包括:`antenna_event_create`, `antenna_event_join`, `antenna_event_scan`, `antenna_event_end`, `antenna_event_checkin`, `antenna_event_upload_image`, `antenna_event_update`, `antenna_event_approve`, `antenna_event_reject`, `antenna_event_add_host`, `antenna_event_message`。
+详见 EVENTS.md。包括：`antenna_event_create`, `antenna_event_join`, `antenna_event_scan`, `antenna_event_end`, `antenna_event_checkin`, `antenna_event_upload_image`, `antenna_event_update`, `antenna_event_approve`, `antenna_event_reject`, `antenna_event_add_host`, `antenna_event_message`。
+
+## Drift Bottle (漂流瓶)
+
+写一段话，丢进海里。随机一个陌生人会捡起它。完全匿名、随机、好玩。
+
+### 规则
+- 每条消息最多 500 字
+- 一次只能捡一个瓶子，回复后才能捡下一个
+- 完全匿名：永远不暴露谁丢的、谁捡的
+- 漂流瓶 7 天后过期
+
+### Tools
+
+#### `antenna_drift_throw`
+丢一个漂流瓶。
+- `sender_id`, `channel`
+- `message`：瓶中的内容（最多 500 字）
+- 返回 bottle_id 和确认
+
+#### `antenna_drift_pick`
+捡一个漂流瓶。
+- `sender_id`, `channel`
+- 返回瓶中消息（匿名）+ bottle_id
+- 如果海上没瓶了，说没有
+- 如果还有没回复的瓶子，提示先回复
+
+#### `antenna_drift_reply`
+回复一个捡起的漂流瓶。
+- `sender_id`, `channel`
+- `bottle_id`：要回复的瓶子 ID
+- `reply`：回复内容（最多 500 字）
+- 回复会匿名漂回给丢瓶子的人
+
+#### `antenna_drift_check`
+检查漂流瓶状态。
+- `sender_id`, `channel`
+- 返回：你丢的瓶子有没有新回复 + 你捡的瓶子有没有待回复
+
+#### `antenna_drift_my_bottles`
+查看你丢过的所有瓶子。
+- `sender_id`, `channel`
+- 返回每个瓶子的状态：🌊 漂流中 / 👀 被捡起 / 💬 已回复
+
+### 什么时候推荐漂流瓶
+- 用户无聊、想找人聊天
+- 用户想写点什么但不知道发给谁
+- 用户想要随机的、意外的连接
+- 用户想匿名表达
+- 附近没人的时候，作为替代发现方式
+
+### 隐私
+- **永远不暴露** 谁丢的瓶子
+- **永远不暴露** 谁捡的瓶子
+- 只展示：消息内容、是否有回复、回复内容
+- device_id 永远不展示给用户
 
 ## Data Transparency
 

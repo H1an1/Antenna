@@ -16,6 +16,7 @@ import {
   handleConfig,
   handleStatus,
   handleLinkAccount,
+  handleDrift,
   handleInstallSkill,
   handleInstallPlugin,
   handleInstallHermesPlugin,
@@ -41,6 +42,8 @@ async function main() {
       return handleDiscover(f);
     case "event":
       return handleEvent(f);
+    case "drift":
+      return handleDrift(f);
     case "bind":
       return handleBind(f);
     case "pass":

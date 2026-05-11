@@ -26,6 +26,11 @@ import {
   addCohost,
   sendEventMessage,
   linkAccount,
+  throwDriftBottle,
+  pickDriftBottle,
+  replyDriftBottle,
+  checkDriftBottles,
+  getMyBottles,
   deriveDeviceId,
   PROFILE_FIELDS,
 } from "./core.js";
@@ -549,6 +554,94 @@ export async function startMcpServer() {
     async ({ sender_id, channel, api_key }) => {
       try {
         const result = await linkAccount({ device_id: deriveDeviceId(sender_id, channel), api_key });
+        return jsonResult(result);
+      } catch (e) { return jsonResult({ error: e.message }); }
+    }
+  );
+
+  // ─── antenna_drift_throw ──────────────────────────────────────
+
+  server.tool(
+    "antenna_drift_throw",
+    "Throw a drift bottle into the sea. Write a message (max 500 chars), a random stranger will pick it up. Completely anonymous.",
+    {
+      sender_id: z.string().describe("The sender's user ID"),
+      channel: z.string().describe("Channel name"),
+      message: z.string().describe("Message to put in the bottle (max 500 chars)"),
+    },
+    async ({ sender_id, channel, message }) => {
+      try {
+        const result = await throwDriftBottle({ device_id: deriveDeviceId(sender_id, channel), message });
+        return jsonResult(result);
+      } catch (e) { return jsonResult({ error: e.message }); }
+    }
+  );
+
+  // ─── antenna_drift_pick ───────────────────────────────────────
+
+  server.tool(
+    "antenna_drift_pick",
+    "Pick up a random drift bottle from the sea. Returns the anonymous message inside. You must reply before picking another.",
+    {
+      sender_id: z.string().describe("The sender's user ID"),
+      channel: z.string().describe("Channel name"),
+    },
+    async ({ sender_id, channel }) => {
+      try {
+        const result = await pickDriftBottle({ device_id: deriveDeviceId(sender_id, channel) });
+        return jsonResult(result);
+      } catch (e) { return jsonResult({ error: e.message }); }
+    }
+  );
+
+  // ─── antenna_drift_reply ──────────────────────────────────────
+
+  server.tool(
+    "antenna_drift_reply",
+    "Reply to a drift bottle you picked up. Your reply will anonymously float back to the original sender.",
+    {
+      sender_id: z.string().describe("The sender's user ID"),
+      channel: z.string().describe("Channel name"),
+      bottle_id: z.string().describe("ID of the bottle to reply to"),
+      reply: z.string().describe("Reply message (max 500 chars)"),
+    },
+    async ({ sender_id, channel, bottle_id, reply }) => {
+      try {
+        const result = await replyDriftBottle({ bottle_id, device_id: deriveDeviceId(sender_id, channel), reply });
+        return jsonResult(result);
+      } catch (e) { return jsonResult({ error: e.message }); }
+    }
+  );
+
+  // ─── antenna_drift_check ──────────────────────────────────────
+
+  server.tool(
+    "antenna_drift_check",
+    "Check drift bottle status — any new replies on bottles you threw, or pending bottles you picked up.",
+    {
+      sender_id: z.string().describe("The sender's user ID"),
+      channel: z.string().describe("Channel name"),
+    },
+    async ({ sender_id, channel }) => {
+      try {
+        const result = await checkDriftBottles({ device_id: deriveDeviceId(sender_id, channel) });
+        return jsonResult(result);
+      } catch (e) { return jsonResult({ error: e.message }); }
+    }
+  );
+
+  // ─── antenna_drift_my_bottles ─────────────────────────────────
+
+  server.tool(
+    "antenna_drift_my_bottles",
+    "View all drift bottles you've thrown. Shows status: 🌊 drifting / 👀 picked up / 💬 replied.",
+    {
+      sender_id: z.string().describe("The sender's user ID"),
+      channel: z.string().describe("Channel name"),
+    },
+    async ({ sender_id, channel }) => {
+      try {
+        const result = await getMyBottles({ device_id: deriveDeviceId(sender_id, channel) });
         return jsonResult(result);
       } catch (e) { return jsonResult({ error: e.message }); }
     }
