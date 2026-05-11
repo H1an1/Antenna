@@ -67,14 +67,18 @@ export async function handleScan(f) {
 export async function handleProfile(f) {
   const id = resolveId(f);
   if (!id) return console.error("Usage: antenna profile --id <platform>:<user_id> [--name Yi --personal-description '...' --looking-for '...' --conversation-style '...' --hide --visible true]");
-  if (f.name || f["personal-description"] || f["looking-for"] || f["conversation-style"] || f["more-information"] || f.visible !== undefined || f.hide !== undefined) {
+  if (f.name || f["personal-description"] !== undefined || f.line1 !== undefined || f["looking-for"] !== undefined || f.line2 !== undefined || f["conversation-style"] !== undefined || f.line3 !== undefined || f["more-information"] !== undefined || f.contact !== undefined || f.visible !== undefined || f.hide !== undefined) {
     const visible = f.hide ? false : (f.visible !== undefined ? f.visible === 'true' || f.visible === true : undefined);
     const payload = { device_id: id };
     if (f.name) payload.display_name = f.name;
     if (f["personal-description"] !== undefined) payload.line1 = f["personal-description"];
+    else if (f.line1 !== undefined) payload.line1 = f.line1;
     if (f["looking-for"] !== undefined) payload.line2 = f["looking-for"];
+    else if (f.line2 !== undefined) payload.line2 = f.line2;
     if (f["conversation-style"] !== undefined) payload.line3 = f["conversation-style"];
+    else if (f.line3 !== undefined) payload.line3 = f.line3;
     if (f["more-information"] !== undefined) payload.matching_context = f["more-information"];
+    if (f.contact !== undefined) payload.contact_info = f.contact;
     if (visible !== undefined) payload.visible = visible;
     const data = await setProfile(payload);
     console.log("✅ Profile saved");
@@ -86,8 +90,14 @@ export async function handleProfile(f) {
     if (data.personal_description) console.log(`  ${data.personal_description}`);
     if (data.looking_for) console.log(`  Looking for: ${data.looking_for}`);
     if (data.conversation_style) console.log(`  Conversation: ${data.conversation_style}`);
+    if (data.line1 && data.line1 !== data.personal_description) console.log(`  Line 1: ${data.line1}`);
+    if (data.line2 && data.line2 !== data.looking_for) console.log(`  Line 2: ${data.line2}`);
+    if (data.line3 && data.line3 !== data.conversation_style) console.log(`  Line 3: ${data.line3}`);
     if (data.interest_tags?.length) console.log(`  Tags: ${data.interest_tags.join(", ")}`);
     if (data.city) console.log(`  📍 ${data.city}`);
+    if (data.contact_info) console.log(`  📇 Contact: ${data.contact_info}`);
+    if (data.profile_slug) console.log(`  🔗 https://www.antenna.fyi/p/${data.profile_slug}`);
+    console.log(`  Status: ${data.visible === false ? "hidden" : "visible"}`);
     if (data.context) console.log(`  More information: ${data.context}`);
   }
 }

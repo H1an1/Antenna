@@ -250,6 +250,7 @@ export async function setProfile({
   line2,
   line3,
   matching_context,
+  contact_info,
   visible = true,
   interest_tags,
   city,
@@ -301,6 +302,7 @@ export async function setProfile({
     p_line3: line3 || null,
     p_visible: visible,
     p_matching_context: contextJson || null,
+    p_contact_info: contact_info || null,
   });
   if (error) throw new Error(error.message);
 
@@ -326,10 +328,20 @@ export async function setProfile({
   let publicUrl = null;
   let bindUrl = null;
   let archetypeResult = null;
+  let profileSlug = null;
   try {
     const profile = await getProfile({ device_id, supabaseUrl, supabaseKey });
-    if (profile?.profile_slug) {
-      publicUrl = `https://www.antenna.fyi/p/${profile.profile_slug}`;
+    profileSlug = profile?.profile_slug || null;
+    if (!profileSlug && display_name) {
+      const slug = display_name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").substring(0, 30);
+      if (slug) {
+        const { error: slugError } = await sb.from("profiles").update({ profile_slug: slug }).eq("device_id", device_id);
+        if (slugError) throw new Error(slugError.message);
+        profileSlug = slug;
+      }
+    }
+    if (profileSlug) {
+      publicUrl = `https://www.antenna.fyi/p/${profileSlug}`;
     }
   } catch {}
 
@@ -386,6 +398,7 @@ export async function setProfile({
 
   return {
     ...data,
+    profile_slug: profileSlug || data?.profile_slug || null,
     public_url: publicUrl,
     gps_bind_url: bindUrl,
     archetype: archetypeResult || null,
