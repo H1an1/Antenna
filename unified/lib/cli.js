@@ -122,7 +122,8 @@ export async function handleAccept(f) {
   if (!id || (!f.target && !f.ref)) return console.error("Usage: antenna accept --id <platform>:<user_id> --ref 1 [--contact 'WeChat: yi']\n       antenna accept --id <platform>:<user_id> --target <ref_or_device_id> [--contact 'WeChat: yi']");
   const result = await accept({
     device_id: id,
-    target_device_id: f.target || null,
+    target_device_id: f.target && f.target.includes(':') ? f.target : null,
+    profile_slug: f.target && !f.target.includes(':') ? f.target : null,
     ref: f.ref || null,
     contact_info: f.contact,
   });
