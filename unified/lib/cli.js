@@ -66,7 +66,7 @@ export async function handleScan(f) {
 
 export async function handleProfile(f) {
   const id = resolveId(f);
-  if (!id) return console.error("Usage: antenna profile --id <platform>:<user_id> [--name Yi --personal-description '...' --looking-for '...' --conversation-style '...' --hide --visible true]"););
+  if (!id) return console.error("Usage: antenna profile --id <platform>:<user_id> [--name Yi --personal-description '...' --looking-for '...' --conversation-style '...' --hide --visible true]");
   if (f.name || f["personal-description"] || f["looking-for"] || f["conversation-style"] || f["more-information"] || f.visible !== undefined || f.hide !== undefined) {
     const visible = f.hide ? false : (f.visible !== undefined ? f.visible === 'true' || f.visible === true : undefined);
     const payload = { device_id: id };
