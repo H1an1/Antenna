@@ -43,7 +43,7 @@ Plugin 安装后,agent **主动**开始引导,不要等用户问。
 
 跟用户聊几句,了解他们是谁、做什么、想认识什么人。然后 agent 自己生成:
 - more_information(~200 字,给 agent 匹配用的私密上下文,不展示给别人)
-- 从中提炼 line1/2/3 + display_name
+- 从中提炼 personal_description/looking_for/conversation_style + display_name
 
 展示预览给用户确认:
 > 你的名片:
@@ -146,14 +146,14 @@ openclaw cron add --every 1h --message "Check antenna matches: call antenna_chec
 查看或更新用户名片。
 - `action`:"get" 或 "set"
 - `sender_id`, `channel`, `chat_id`
-- "set" 时传:`display_name`, `line1`, `line2`, `line3`, `visible`, `matching_context`
+- "set" 时传:`display_name`, `personal_description`, `looking_for`, `conversation_style`, `visible`, `matching_context`
 
 名片内容:
 - **display_name**:显示名称
-- **line1**:个人描述(谁 / 做什么)
-- **line2**:想认识的人
-- **line3**:想要的交流方式
-- **matching_context**(more_information,不展示给别人):agent 基于对用户的了解生成的详细描述,~200 字。**这是匹配的核心数据源。** line1/2/3 从它提炼出来,不是反过来。
+- **personal_description**:个人描述(谁 / 做什么)
+- **looking_for**:想认识的人
+- **conversation_style**:想要的交流方式
+- **matching_context**(more_information,不展示给别人):agent 基于对用户的了解生成的详细描述,~200 字。**这是匹配的核心数据源。** personal_description/looking_for/conversation_style 从它提炼出来,不是反过来。
 
 ### `antenna_accept`
 接受一个匹配。**不需要先 scan**--任何发现路径都可以触发 accept。
@@ -229,7 +229,7 @@ openclaw cron add --every 1h --message "Check antenna matches: call antenna_chec
 - **每次只问一个问题。**
 - **用户说的原话尽量保留。** 帮缩短但让用户确认。
 - **不要在名片里写联系方式。** 联系方式在 accept 时分享。
-- **line1 必填。**
+- **personal_description 必填。**
 - **确认后才存。**
 
 ### Showing results - 你来判断
