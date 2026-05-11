@@ -122,7 +122,7 @@ export async function startMcpServer() {
       looking_for: z.string().optional().describe("Looking for — the kind of people you want to meet (max 140 chars)"),
       conversation_style: z.string().optional().describe("Conversation style — the type of conversations you want (max 160 chars)"),
       more_information: z.string().optional().describe("More information — agent-generated rich context for better matching (not shown to others, max 1000 chars). Generate this FIRST, then derive personal_description, looking_for, and conversation_style from it."),
-      interest_tags: z.array(z.string()).optional().describe("Interest/topic tags shown on the card (up to 8)"),
+      interest_tags: z.array(z.string()).optional().describe("Interest/topic tags shown on the card (up to 5)"),
       city: z.string().optional().describe("Country or region (e.g. 'United States', 'Beijing')"),
       links: z.array(z.string()).optional().describe("Social links shown on the card footer (up to 3)"),
       is_active: z.boolean().optional().describe("Whether the profile is active or quiet"),

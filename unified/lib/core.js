@@ -206,7 +206,7 @@ export const PROFILE_FIELDS = {
   looking_for: { label: "想认识的人", description: "The kind of people you want to meet", maxLength: 140 },
   conversation_style: { label: "想要的交流方式", description: "The type of conversations you want", maxLength: 160 },
   more_information: { label: "更多信息", description: "Agent-generated rich context for better matching (not shown to others)", maxLength: 1000 },
-  interest_tags: { label: "兴趣标签", description: "Interest/topic tags shown on the card (up to 8)", maxItems: 8 },
+  interest_tags: { label: "兴趣标签", description: "Interest/topic tags shown on the card (up to 5)", maxItems: 5 },
   city: { label: "国家/地区", description: "Country or region" },
   links: { label: "社交链接", description: "Social links shown on the card footer (up to 3)", maxItems: 3 },
   is_active: { label: "状态", description: "Whether the profile is active or quiet" },
