@@ -332,12 +332,11 @@ export async function setProfile({
   try {
     const profile = await getProfile({ device_id, supabaseUrl, supabaseKey });
     profileSlug = profile?.profile_slug || null;
-    if (!profileSlug && display_name) {
-      const slug = display_name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").substring(0, 30);
-      if (slug) {
-        const { data: slugResult } = await sb.rpc("set_profile_slug", { p_device_id: device_id, p_slug: slug });
-        if (slugResult?.set) profileSlug = slug;
-      }
+    // Use explicitly passed slug, or auto-generate from display_name
+    const targetSlug = profile_slug || (!profileSlug && display_name ? display_name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").substring(0, 30) : null);
+    if (targetSlug && targetSlug !== profileSlug) {
+      const { data: slugResult } = await sb.rpc("set_profile_slug", { p_device_id: device_id, p_slug: targetSlug });
+      if (slugResult?.set) profileSlug = targetSlug;
     }
     if (profileSlug) {
       publicUrl = `https://www.antenna.fyi/p/${profileSlug}`;

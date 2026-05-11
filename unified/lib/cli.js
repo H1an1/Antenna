@@ -67,7 +67,7 @@ export async function handleScan(f) {
 export async function handleProfile(f) {
   const id = resolveId(f);
   if (!id) return console.error("Usage: antenna profile --id <platform>:<user_id> [--name Yi --personal-description '...' --looking-for '...' --conversation-style '...' --hide --visible true]");
-  if (f.name || f["personal-description"] !== undefined || f.line1 !== undefined || f["looking-for"] !== undefined || f.line2 !== undefined || f["conversation-style"] !== undefined || f.line3 !== undefined || f["more-information"] !== undefined || f.contact !== undefined || f.visible !== undefined || f.hide !== undefined) {
+  if (f.name || f["personal-description"] !== undefined || f.line1 !== undefined || f["looking-for"] !== undefined || f.line2 !== undefined || f["conversation-style"] !== undefined || f.line3 !== undefined || f["more-information"] !== undefined || f.contact !== undefined || f.slug !== undefined || f.visible !== undefined || f.hide !== undefined) {
     const visible = f.hide ? false : (f.visible !== undefined ? f.visible === 'true' || f.visible === true : undefined);
     const payload = { device_id: id };
     if (f.name) payload.display_name = f.name;
@@ -79,6 +79,7 @@ export async function handleProfile(f) {
     else if (f.line3 !== undefined) payload.line3 = f.line3;
     if (f["more-information"] !== undefined) payload.matching_context = f["more-information"];
     if (f.contact !== undefined) payload.contact_info = f.contact;
+    if (f.slug !== undefined) payload.profile_slug = f.slug;
     if (visible !== undefined) payload.visible = visible;
     const data = await setProfile(payload);
     if (data?.error) {
