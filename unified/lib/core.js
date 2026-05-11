@@ -350,45 +350,32 @@ export async function setProfile({
     }
   } catch {}
 
-  // Generate personalized archetype description via LLM
+  // Generate personalized archetype via LLM (no keyword matching)
   try {
     const profileText = [line1, line2, line3, matching_context].filter(Boolean).join(". ");
     if (profileText) {
-      // Simple keyword-based archetype detection (same logic as frontend)
-      const corpus = profileText.toLowerCase();
-      const archetypeKeywords = {
-        Prometheus: ["ai", "agent", "llm", "founder", "startup", "build", "developer", "hacker", "tools", "\u667a\u80fd\u4f53", "\u521b\u4e1a", "\u5f00\u53d1"],
-        Athena: ["product", "strategy", "research", "design", "craft", "pm", "ux", "\u4ea7\u54c1", "\u8bbe\u8ba1", "\u7814\u7a76"],
-        Hermes: ["network", "connect", "community", "social", "bridge", "\u793e\u4ea4", "\u8fde\u63a5", "\u793e\u533a"],
-        Apollo: ["music", "media", "content", "creator", "writing", "taste", "\u97f3\u4e50", "\u5185\u5bb9", "\u521b\u4f5c"],
-        Artemis: ["independent", "explore", "freelance", "health", "outdoor", "\u72ec\u7acb", "\u63a2\u7d22"],
-        Aphrodite: ["beauty", "brand", "fashion", "relationship", "\u7f8e", "\u54c1\u724c", "\u65f6\u5c1a"],
-        Dionysus: ["event", "culture", "party", "art", "festival", "\u6d3b\u52a8", "\u6587\u5316", "\u827a\u672f"],
-        Hades: ["finance", "invest", "infrastructure", "backend", "security", "\u6295\u8d44", "\u91d1\u878d", "\u67b6\u6784"],
-        Persephone: ["transform", "cross", "research", "academic", "bridge", "\u8de8\u754c", "\u7814\u7a76", "\u5b66\u672f"],
-        Odysseus: ["founder", "journey", "resilience", "travel", "startup", "\u521b\u4e1a", "\u65c5\u884c"],
-      };
-      let bestArchetype = "Prometheus";
-      let bestScore = 0;
-      for (const [role, keywords] of Object.entries(archetypeKeywords)) {
-        const score = keywords.reduce((s, kw) => s + (corpus.includes(kw) ? 1 : 0), 0);
-        if (score > bestScore) { bestScore = score; bestArchetype = role; }
-      }
-      archetypeResult = await generateArchetypeReason(bestArchetype, profileText);
-      if (archetypeResult?.reason) {
-        archetypeResult.archetype = bestArchetype;
-        // Write archetype back to matching_context so dashboard can display it
-        try {
-          const profile = await getProfile({ device_id, supabaseUrl, supabaseKey });
-          let ctx = {};
-          try { ctx = JSON.parse(profile?.matching_context || "{}"); } catch {}
-          ctx.archetypeOverride = { name: bestArchetype, reason: archetypeResult.reason, reasonZh: archetypeResult.reasonZh };
-          await sb.rpc("upsert_profile", {
-            p_device_id: device_id,
-            p_matching_context: JSON.stringify(ctx),
-            p_visible: profile?.visible ?? true,
-          });
-        } catch {}
+      const archRes = await fetch(`${_url || DEFAULT_URL}/functions/v1/generate-archetype`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${_key || DEFAULT_KEY}` },
+        body: JSON.stringify({ profile_text: profileText }),
+      });
+      if (archRes.ok) {
+        const archData = await archRes.json();
+        if (archData?.archetype && archData?.reason) {
+          archetypeResult = { archetype: archData.archetype, reason: archData.reason, reasonZh: archData.reasonZh };
+          // Write archetype back to matching_context
+          try {
+            const profile = await getProfile({ device_id, supabaseUrl, supabaseKey });
+            let ctx = {};
+            try { ctx = JSON.parse(profile?.matching_context || "{}"); } catch {}
+            ctx.archetypeOverride = { name: archData.archetype, reason: archData.reason, reasonZh: archData.reasonZh };
+            await sb.rpc("upsert_profile", {
+              p_device_id: device_id,
+              p_matching_context: JSON.stringify(ctx),
+              p_visible: profile?.visible ?? true,
+            });
+          } catch {}
+        }
       }
     }
   } catch (e) {
