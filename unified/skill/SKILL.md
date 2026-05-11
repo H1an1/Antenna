@@ -44,7 +44,7 @@ Plugin 安装后,agent **主动**开始引导,不要等用户问。
 跟用户聊几句,了解他们是谁、做什么、想认识什么人。然后 agent 自己生成:
 - more_information(~200 字,给 agent 匹配用的私密上下文,不展示给别人)
 - 从中提炼 personal_description/looking_for/conversation_style + display_name
-- 提取 interest_tags（最多 8 个，如 "AI agents", "music", "design"）
+- 提取 interest_tags（最多 5 个，如 "AI agents", "music", "design"）
 
 展示预览给用户确认:
 > 你的名片:
