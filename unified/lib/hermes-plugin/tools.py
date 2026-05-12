@@ -5,6 +5,7 @@ shared backend if no env vars are set.
 """
 
 import json
+import hashlib
 import math
 import os
 import time
@@ -31,6 +32,15 @@ _last_scan: dict[str, float] = {}
 SCAN_DEBOUNCE_S = 30
 _last_ref_map: dict[str, str] = {}  # ref → device_id from last scan
 _my_device_ids: set[str] = set()  # track this user's device_ids for match checking
+
+
+def _profile_slug_candidate(display_name: str | None, device_id: str) -> str:
+    raw = "".join(ch.lower() if ch.isalnum() and ch.isascii() else "-" for ch in (display_name or ""))
+    slug = "-".join(part for part in raw.split("-") if part)[:30].strip("-")
+    if slug:
+        return slug
+    digest = hashlib.sha1(device_id.encode("utf-8")).hexdigest()[:10]
+    return f"user-{digest}"
 
 
 def _get_url():
@@ -192,10 +202,30 @@ def handle_profile(params: dict) -> str:
     }
     if params.get("matching_context") is not None:
         rpc_params["p_matching_context"] = params["matching_context"]
+    rpc_params["p_api_key"] = params.get("api_key")
     resp = sb.rpc("upsert_profile", rpc_params).execute()
 
     if resp.data:
-        return _ok({"updated": True, "profile": resp.data, "next_step": "IMPORTANT: Now call antenna_bind to generate a GPS link for the user. Do not skip this."})
+        public_url = None
+        try:
+            profile_resp = sb.rpc("get_profile", {"p_device_id": did}).execute()
+            profile = profile_resp.data or {}
+            profile_slug = profile.get("profile_slug")
+            if not profile_slug:
+                target_slug = _profile_slug_candidate(params.get("display_name"), did)
+                slug_resp = sb.rpc("set_profile_slug", {"p_device_id": did, "p_slug": target_slug, "p_api_key": params.get("api_key")}).execute()
+                if isinstance(slug_resp.data, dict) and slug_resp.data.get("set"):
+                    profile_slug = target_slug
+            if profile_slug:
+                public_url = f"https://www.antenna.fyi/p/{profile_slug}"
+        except Exception:
+            public_url = None
+        return _ok({
+            "updated": True,
+            "profile": resp.data,
+            "public_url": public_url,
+            "next_step": "IMPORTANT: 1) Send public_url to the user — this is their shareable profile link. 2) Call antenna_bind to generate a GPS link. Do not skip either step.",
+        })
     return _ok({"error": "upsert_profile failed"})
 
 

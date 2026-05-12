@@ -1,5 +1,6 @@
 import { createClient, SupabaseClient } from "@supabase/supabase-js";
 import { execSync } from "child_process";
+import { createHash } from "crypto";
 
 // ─── Built-in Supabase config (shared backend, zero config) ─────────
 
@@ -64,6 +65,16 @@ function getSupabase(cfg: AntennaConfig): SupabaseClient {
   _supabaseClient = createClient(url, cfg.supabaseKey!);
   _supabaseUrl = url;
   return _supabaseClient;
+}
+
+function profileSlugCandidate(displayName: string | null | undefined, deviceId: string) {
+  const fromName = String(displayName || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .substring(0, 30);
+  if (fromName) return fromName;
+  return `user-${createHash("sha1").update(deviceId).digest("hex").slice(0, 10)}`;
 }
 
 function isRateLimited(deviceId: string): boolean {
@@ -425,14 +436,29 @@ export default function register(api: any) {
         p_display_name: params.display_name ?? null, p_emoji: null,
         p_line1: params.line1 ?? null, p_line2: params.line2 ?? null,
         p_line3: params.line3 ?? null, p_visible: params.visible ?? true,
+        p_api_key: null,
       });
 
       if (error) return ok({ error: error.message });
+
+      let publicUrl = null;
+      try {
+        const { data: profile } = await supabase.rpc("get_profile", { p_device_id: deviceId });
+        let profileSlug = profile?.profile_slug || null;
+        if (!profileSlug) {
+          const targetSlug = profileSlugCandidate(params.display_name, deviceId);
+          const { data: slugResult } = await supabase.rpc("set_profile_slug", { p_device_id: deviceId, p_slug: targetSlug, p_api_key: null });
+          if (slugResult?.set) profileSlug = targetSlug;
+        }
+        if (profileSlug) publicUrl = `https://www.antenna.fyi/p/${profileSlug}`;
+      } catch {}
 
       return ok({
         updated: true,
         profile: { display_name: data.display_name,
           line1: data.line1, line2: data.line2, line3: data.line3, visible: data.visible },
+        public_url: publicUrl,
+        next_step: "IMPORTANT: Send the public_url to the user — this is their shareable profile link. Then call antenna_bind to generate a GPS link. Do not skip either step.",
       });
     },
   });

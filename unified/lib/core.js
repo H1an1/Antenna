@@ -2,6 +2,7 @@
 // All three import this instead of duplicating Supabase calls.
 
 import { createClient } from "@supabase/supabase-js";
+import { createHash } from "node:crypto";
 
 const DEFAULT_URL = "https://bcudjloikmpcqwcptuyd.supabase.co";
 const DEFAULT_KEY =
@@ -53,6 +54,17 @@ function mapSearchProfile(p, ref, query) {
     match_score: typeof p.match_score === "number" ? Math.round(p.match_score * 1000) / 1000 : null,
     recommendation_reason: profileSearchReason(query, p),
   };
+}
+
+function profileSlugCandidate(displayName, deviceId) {
+  const fromName = String(displayName || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .substring(0, 30);
+  if (fromName) return fromName;
+  const hash = createHash("sha1").update(String(deviceId || "antenna-user")).digest("hex").slice(0, 10);
+  return `user-${hash}`;
 }
 
 async function generateMatchReason(myLines, theirLines) {
@@ -227,15 +239,15 @@ export async function scan({ lat, lng, radius_m = 500, device_id, supabaseUrl, s
 // ─── Profile field metadata (self-describing API) ───────────────────
 
 export const PROFILE_FIELDS = {
-  display_name: { label: "显示名称", description: "How you want to be called" },
-  personal_description: { label: "个人描述", description: "Who you are and what you do", maxLength: 220, required: true },
-  looking_for: { label: "想认识的人", description: "The kind of people you want to meet", maxLength: 140 },
-  conversation_style: { label: "想要的交流方式", description: "The type of conversations you want", maxLength: 160 },
-  more_information: { label: "更多信息", description: "Agent-generated rich context for better matching (not shown to others)", maxLength: 1000 },
-  interest_tags: { label: "兴趣标签", description: "Interest/topic tags shown on the card (up to 5)", maxItems: 5 },
-  city: { label: "国家/地区", description: "Country or region" },
-  links: { label: "社交链接", description: "Social links shown on the card footer (up to 3)", maxItems: 3 },
-  is_active: { label: "状态", description: "Whether the profile is active or quiet" },
+  display_name: { label: "显示名称", i18n: { en: "Display name", zh: "显示名称" }, description: "How you want to be called" },
+  personal_description: { label: "个人描述", i18n: { en: "Personal description", zh: "个人描述" }, description: "Who you are and what you do", maxLength: 220, required: true },
+  looking_for: { label: "想认识的人", i18n: { en: "Looking for", zh: "想认识的人" }, description: "The kind of people you want to meet", maxLength: 140 },
+  conversation_style: { label: "想要的交流方式", i18n: { en: "Conversation style", zh: "想要的交流方式" }, description: "The type of conversations you want", maxLength: 160 },
+  more_information: { label: "更多信息", i18n: { en: "More information", zh: "更多信息" }, description: "Agent-generated rich context for better matching (not shown to others)", maxLength: 1000 },
+  interest_tags: { label: "兴趣标签", i18n: { en: "Interest tags", zh: "兴趣标签" }, description: "Interest/topic tags shown on the card (up to 5)", maxItems: 5 },
+  city: { label: "国家/地区", i18n: { en: "Country/region", zh: "国家/地区" }, description: "Country or region" },
+  links: { label: "社交链接", i18n: { en: "Social links", zh: "社交链接" }, description: "Social links shown on the card footer (up to 3)", maxItems: 3 },
+  is_active: { label: "状态", i18n: { en: "Status", zh: "状态" }, description: "Whether the profile is active or quiet" },
 };
 
 // ─── getProfile ──────────────────────────────────────────────────────
@@ -335,7 +347,7 @@ export async function setProfile({
     p_visible: visible,
     p_matching_context: contextJson || null,
     p_contact_info: contact_info || null,
-    ...(api_key ? { p_api_key: api_key } : {}),
+    p_api_key: api_key || null,
   });
   if (error) throw new Error(error.message);
 
@@ -366,9 +378,9 @@ export async function setProfile({
     const profile = await getProfile({ device_id, supabaseUrl, supabaseKey });
     profileSlug = profile?.profile_slug || null;
     // Use explicitly passed slug, or auto-generate from display_name
-    const targetSlug = profile_slug || (!profileSlug && display_name ? display_name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").substring(0, 30) : null);
+    const targetSlug = profile_slug || (!profileSlug ? profileSlugCandidate(display_name, device_id) : null);
     if (targetSlug && targetSlug !== profileSlug) {
-      const { data: slugResult } = await sb.rpc("set_profile_slug", { p_device_id: device_id, p_slug: targetSlug });
+      const { data: slugResult } = await sb.rpc("set_profile_slug", { p_device_id: device_id, p_slug: targetSlug, p_api_key: api_key || null });
       if (slugResult?.set) profileSlug = targetSlug;
     }
     if (profileSlug) {

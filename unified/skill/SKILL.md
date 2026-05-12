@@ -71,9 +71,11 @@ Plugin 安装后,agent **主动**开始引导,不要等用户问。
 
 **第四步:发公开链接给用户**
 
-Profile 存好后,返回里会有 `public_url`(如 `antenna.fyi/p/yi`)。**必须发给用户:**
+Profile 存好后,返回里会有 `public_url`(如 `antenna.fyi/p/yi`)。**必须立刻发给用户。不要只说"保存好了"。**
 > "这是你的公开名片链接:[public_url]
 > 你可以把它发给别人,对方的 agent 看到链接就能直接 accept 你。"
+
+如果 `public_url` 为空,说明 profile link 生成失败。立刻重试保存 profile 或提示错误,不要进入下一步。
 
 **第五步:调 antenna_bind 获取 GPS 链接**
 
@@ -169,6 +171,8 @@ openclaw cron add --every 1h --message "Check antenna matches: call antenna_chec
 - **looking_for**:想认识的人
 - **conversation_style**:想要的交流方式
 - **matching_context**(more_information,不展示给别人):agent 基于对用户的了解生成的详细描述,~200 字。**这是匹配的核心数据源。** personal_description/looking_for/conversation_style 从它提炼出来,不是反过来。
+
+**i18n:** 用户填写的内容按原文保存和展示,不要自动翻译用户的 profile 文本。Antenna 的网页 UI 会切换中文/英文标签; profile 内容本身保持用户选择的语言。保存后返回的 `public_url` 必须发给用户。
 
 ### `antenna_accept`
 接受一个匹配。**不需要先 scan**--任何发现路径都可以触发 accept。

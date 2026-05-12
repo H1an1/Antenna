@@ -113,7 +113,7 @@ export async function startMcpServer() {
 
   server.tool(
     "antenna_profile",
-    "Get or set the user's Antenna profile card. The profile has a display name and three descriptions: personal description, looking for, and conversation style.",
+    "Get or set the user's Antenna profile card. After setting a profile, send profile.public_url to the user as their public profile link, then send the GPS bind link.",
     {
       action: z.enum(["get", "set"]).describe("'get' to read, 'set' to write"),
       sender_id: z.string().describe("The sender's user ID"),

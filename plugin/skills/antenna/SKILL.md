@@ -172,6 +172,10 @@ The name card has:
 **During onboarding, generate `matching_context` FIRST** based on your conversation with the user (+ memory, SOUL.md, etc.). Then derive line1/2/3 from it. Don't ask the user to write matching_context - you write it. Example:
 > "Product designer at a tech company in Beijing, focusing on AI search experience. Interested in music (Sakamoto), swimming, cooking, language learning. Recently exploring AI agent ecosystems and social discovery. Looking to connect with AI builders, indie hackers, and creative technologists."
 
+After setting a profile, the tool returns `public_url`. **You must immediately send that link to the user** as their shareable public profile. If `public_url` is empty, retry profile save or report that link generation failed.
+
+**i18n:** Save and show user-written profile content in the user's original language. Do not machine-translate their personal description, looking-for text, or conversation style. Antenna UI labels can switch language; the user's own text stays as written.
+
 ### `antenna_accept`
 Accept a match after the user sees results. Can optionally include contact info to share.
 - `sender_id`, `channel`, `target_device_id`
