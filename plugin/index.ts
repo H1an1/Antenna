@@ -478,6 +478,8 @@ export default function register(api: any) {
       });
 
       if (error) return ok({ error: error.message });
+      if (data?.error) return ok({ error: data.message || data.error });
+      if (data?.device_id) deviceId = data.device_id;
 
       // Read back profile to get slug for public page link
       let publicUrl = null;

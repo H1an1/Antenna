@@ -221,7 +221,10 @@ def handle_profile(params: dict) -> str:
     rpc_params["p_api_key"] = params.get("api_key")
     resp = sb.rpc("upsert_profile", rpc_params).execute()
 
+    if isinstance(resp.data, dict) and resp.data.get("error"):
+        return _ok({"error": resp.data.get("message") or resp.data.get("error")})
     if resp.data:
+        did = resp.data.get("device_id") or did
         public_url = None
         try:
             profile_resp = sb.rpc("get_profile", {"p_device_id": did}).execute()

@@ -135,6 +135,7 @@ export async function setProfile({
     p_api_key: api_key,
   });
   if (error) throw new Error(error.message);
+  if (data?.error) throw new Error(data.message || data.error);
   return data;
 }
 

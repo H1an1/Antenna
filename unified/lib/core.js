@@ -362,6 +362,8 @@ export async function setProfile({
     p_api_key: api_key || null,
   });
   if (error) throw new Error(error.message);
+  if (data?.error) throw new Error(data.message || data.error);
+  if (data?.device_id) device_id = data.device_id;
 
   // Generate embedding using lines + matching_context for better quality
   try {
