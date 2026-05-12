@@ -128,8 +128,9 @@ export async function startMcpServer() {
       links: z.array(z.string()).optional().describe("Social links shown on the card footer (up to 3)"),
       is_active: z.boolean().optional().describe("Whether the profile is active or quiet"),
       visible: z.boolean().optional().default(true),
+      api_key: z.string().optional().describe("Required for action='set': the user's Antenna API key from antenna.fyi/me. Profile writes use this key and the dashboard-linked user:<uuid> device_id."),
     },
-    async ({ action, sender_id, channel, display_name, personal_description, looking_for, conversation_style, more_information, interest_tags, city, links, is_active, visible }) => {
+    async ({ action, sender_id, channel, display_name, personal_description, looking_for, conversation_style, more_information, interest_tags, city, links, is_active, visible, api_key }) => {
       const deviceId = deriveDeviceId(sender_id, channel);
       try {
         if (action === "get") {
@@ -139,8 +140,8 @@ export async function startMcpServer() {
             : { profile: null, message: "还没有名片。跟用户聊聊他们是谁、做什么、想认识什么人，然后帮他们创建。", fields: PROFILE_FIELDS };
           return jsonResult(await withMatchNotifications(deviceId, result));
         }
-        const data = await setProfile({ device_id: deviceId, display_name, line1: personal_description, line2: looking_for, line3: conversation_style, matching_context: more_information, interest_tags, city, links, is_active, visible });
-        return jsonResult(await withMatchNotifications(deviceId, { saved: true, profile: data }));
+        const data = await setProfile({ device_id: deviceId, display_name, line1: personal_description, line2: looking_for, line3: conversation_style, matching_context: more_information, interest_tags, city, links, is_active, visible, api_key });
+        return jsonResult(await withMatchNotifications(data.dashboard_device_id || deviceId, { saved: true, profile: data }));
       } catch (e) {
         return jsonResult({ error: e.message });
       }

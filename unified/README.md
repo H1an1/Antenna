@@ -26,7 +26,10 @@ antenna checkin --id <platform>:<user_id> --lat 39.99 --lng 116.48
 
 # View/edit your profile
 antenna profile --id <platform>:<user_id>
-antenna profile --id <platform>:<user_id> --name Yi --emoji 🦦 --line1 'Product Designer'
+antenna config --key <ant_xxx>
+antenna profile --id <platform>:<user_id> --name Yi --line1 'Product Designer'
+
+Profile writes require the user's Antenna API key from antenna.fyi/me. The CLI verifies the key and writes to the dashboard-linked `user:<uuid>` profile; agents should not create profiles from `channel:sender_id`.
 
 # Accept a match
 antenna accept --id <platform>:<user_id> --target <ref_or_id> --contact 'WeChat: yi'

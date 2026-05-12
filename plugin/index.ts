@@ -83,6 +83,18 @@ function profileSlugCandidate(displayName: string | null | undefined, deviceId: 
   return `user-${createHash("sha1").update(deviceId).digest("hex").slice(0, 10)}`;
 }
 
+async function resolveDashboardDeviceId(supabase: SupabaseClient, apiKey: string | null | undefined) {
+  if (!apiKey) {
+    return { error: "Profile writes require the user's Antenna API key from antenna.fyi/me. Do not create an agent-only profile from sender_id/channel." };
+  }
+  const { data, error } = await supabase.rpc("verify_api_key", { p_key: apiKey });
+  if (error) return { error: error.message };
+  if (!data?.valid) return { error: data?.error || "Invalid Antenna API key" };
+  const deviceId = data.user_id ? `user:${data.user_id}` : data.device_id;
+  if (!deviceId) return { error: "API key verified but did not return a dashboard device_id" };
+  return { deviceId, userId: data.user_id, displayName: data.display_name };
+}
+
 function isRateLimited(deviceId: string): boolean {
   const now = Date.now();
   const last = _lastScanTime.get(deviceId);
@@ -431,13 +443,14 @@ export default function register(api: any) {
         line3: { type: "string", description: "Third line (what you're looking for)" },
         visible: { type: "boolean", description: "Whether to be visible to others" },
         matching_context: { type: "string", description: "More information / free-form context for AI matching (interests, goals, background, etc.)" },
+        api_key: { type: "string", description: "Required for action='set': user's Antenna API key from antenna.fyi/me. Profile writes use the dashboard-linked user:<uuid> profile." },
       },
       required: ["action", "sender_id", "channel", "chat_id"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
-      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
+      let deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
 
       if (params.action === "get") {
         const { data, error } = await supabase.rpc("get_profile", { p_device_id: deviceId });
@@ -451,13 +464,17 @@ export default function register(api: any) {
         });
       }
 
+      const resolved = await resolveDashboardDeviceId(supabase, params.api_key);
+      if (resolved.error) return ok({ error: resolved.error });
+      deviceId = resolved.deviceId!;
+
       const { data, error } = await supabase.rpc("upsert_profile", {
         p_device_id: deviceId,
         p_display_name: params.display_name ?? null, p_emoji: params.emoji ?? null,
         p_line1: params.line1 ?? null, p_line2: params.line2 ?? null,
         p_line3: params.line3 ?? null, p_visible: params.visible ?? true,
         ...(params.matching_context != null ? { p_matching_context: params.matching_context } : {}),
-        p_api_key: null,
+        p_api_key: params.api_key,
       });
 
       if (error) return ok({ error: error.message });
@@ -470,7 +487,7 @@ export default function register(api: any) {
         let profileSlug = profile?.profile_slug || null;
         if (!profileSlug) {
           const targetSlug = profileSlugCandidate(params.display_name, deviceId);
-          const { data: slugResult } = await supabase.rpc("set_profile_slug", { p_device_id: deviceId, p_slug: targetSlug, p_api_key: null });
+          const { data: slugResult } = await supabase.rpc("set_profile_slug", { p_device_id: deviceId, p_slug: targetSlug, p_api_key: params.api_key });
           if (slugResult?.set) profileSlug = targetSlug;
         }
         if (profileSlug) {
@@ -520,6 +537,8 @@ export default function register(api: any) {
         profile: { display_name: data.display_name,
           line1: data.line1, line2: data.line2, line3: data.line3, visible: data.visible },
         public_url: publicUrl,
+        api_key_verified: true,
+        dashboard_device_id: deviceId,
         archetype: archetypeResult || null,
         next_step: "IMPORTANT: 1) Send the public_url to the user — this is their shareable profile link. If public_url is null, say profile link generation failed and retry profile save. 2) Tell the user their archetype and the personalized reason. 3) Call antenna_bind to generate a GPS link. Do not skip any step.",
       });

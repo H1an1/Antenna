@@ -43,6 +43,19 @@ def _profile_slug_candidate(display_name: str | None, device_id: str) -> str:
     return f"user-{digest}"
 
 
+def _dashboard_device_id(sb, api_key: str | None) -> tuple[str | None, str | None]:
+    if not api_key:
+        return None, "Profile writes require the user's Antenna API key from antenna.fyi/me. Do not create an agent-only profile from sender_id/channel."
+    resp = sb.rpc("verify_api_key", {"p_key": api_key}).execute()
+    data = resp.data or {}
+    if not data.get("valid"):
+        return None, data.get("error") or "Invalid Antenna API key"
+    device_id = f"user:{data.get('user_id')}" if data.get("user_id") else data.get("device_id")
+    if not device_id:
+        return None, "API key verified but did not return a dashboard device_id"
+    return device_id, None
+
+
 def _get_url():
     return os.environ.get("ANTENNA_SUPABASE_URL") or os.environ.get("ANTENNA_URL") or BUILTIN_URL
 
@@ -191,6 +204,9 @@ def handle_profile(params: dict) -> str:
         return _ok({"exists": True, "profile": resp.data})
 
     # set
+    did, auth_error = _dashboard_device_id(sb, params.get("api_key"))
+    if auth_error:
+        return _ok({"error": auth_error})
     rpc_params = {
         "p_device_id": did,
         "p_display_name": params.get("display_name"),
@@ -224,6 +240,8 @@ def handle_profile(params: dict) -> str:
             "updated": True,
             "profile": resp.data,
             "public_url": public_url,
+            "api_key_verified": True,
+            "dashboard_device_id": did,
             "next_step": "IMPORTANT: 1) Send public_url to the user — this is their shareable profile link. 2) Call antenna_bind to generate a GPS link. Do not skip either step.",
         })
     return _ok({"error": "upsert_profile failed"})

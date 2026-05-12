@@ -83,6 +83,8 @@ Supabase
 └── pg_cron cleanup        — hourly expired match cleanup
 ```
 
+Profile writes require the user's Antenna API key from antenna.fyi/me. Agents must pass `api_key` to `antenna_profile(action="set")`; the plugin verifies it and writes to the dashboard-linked `user:<uuid>` profile instead of creating a profile from `channel:sender_id`.
+
 ## Supported platforms
 
 Location auto-detection (OpenClaw parses the coordinates):

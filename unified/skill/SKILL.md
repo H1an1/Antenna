@@ -38,9 +38,9 @@ Plugin 安装后,agent **主动**开始引导,不要等用户问。
 **第一步:拿到 API key → 配置**
 > "嘿,你装了 Antenna--它能帮你发现有意思的人。先确认一下,你在 antenna.fyi 注册过了吗?拿到 API key 了吗?"
 
-用户给了 API key 后,调 `antenna config --key <key>` 验证。这会返回 `user_id` 和 `device_id`。
+用户给了 API key 后,调 `antenna config --key <key>` 验证。这会返回 `user_id` 和 dashboard 绑定的 `device_id`。
 
-**⚠️ 之后所有操作必须用 API key 验证返回的 device_id(格式 `user:xxx`)。不要自己拼 `channel:sender_id`。** 这样 agent 创建的 profile 才能在 dashboard 上显示。
+**⚠️ Profile 写入必须通过用户的 Antenna API key。** 调 `antenna_profile(action="set")` 时传 `api_key`，tool 会验证 API key 并使用返回的 dashboard `device_id`(格式 `user:xxx`) 写入。不要自己拼 `channel:sender_id`，不要在用户拿到 API key 前凭空创建 profile。这样 agent 填的内容才会显示在 dashboard。
 
 **第二步:聊天收集 → 生成名片 → 确认**
 
@@ -58,9 +58,9 @@ Plugin 安装后,agent **主动**开始引导,不要等用户问。
 >
 > 这样可以吗?要改哪里告诉我。
 
-确认后用 config 里的 device_id 调 `antenna_profile(action="set")` 保存。**不要跳过确认。**
+确认后调 `antenna_profile(action="set", api_key="ant_xxx")` 保存。**不要跳过确认。**
 
-**⚠️ sender_id 用 config 里的 device_id,不要用 channel:sender_id。**
+**⚠️ 保存 profile 时以 API key 为准；sender_id/channel 只用于上下文，不作为 profile 归属来源。**
 
 **第三步:立刻推荐 2-3 个人**
 
@@ -96,12 +96,12 @@ openclaw cron add --every 1h --message "Check antenna matches: call antenna_chec
 
 ### Linking to antenna.fyi account
 
-如果用户之前通过 agent 创建过 profile(没有网站账号),现在注册了 antenna.fyi:
+Legacy only: 如果用户之前通过旧版 agent 创建过 profile(没有网站账号),现在注册了 antenna.fyi:
 1. 让用户从 antenna.fyi/me 复制 API key
 2. 调 `antenna_link_account(api_key = "ant_xxx")`
 3. 确认:"关联成功!你现在可以在 dashboard 上看到完整的 profile 和匹配记录了。"
 
-这把 agent 创建的 profile(带全部历史)关联到网站账号。
+这只用于迁移旧数据。新流程禁止先创建 agent-only profile 再绑定；必须先拿 API key，再通过 API 写入 dashboard profile。
 
 ## When to use
 
@@ -164,6 +164,7 @@ openclaw cron add --every 1h --message "Check antenna matches: call antenna_chec
 - `action`:"get" 或 "set"
 - `sender_id`, `channel`, `chat_id`
 - "set" 时传:`display_name`, `personal_description`, `looking_for`, `conversation_style`, `visible`, `matching_context`
+- "set" 必须传 `api_key`。tool 会验证 key，并写入 API key 绑定的 dashboard profile；不要用 `sender_id/channel` 创建独立 profile。
 
 名片内容:
 - **display_name**:显示名称

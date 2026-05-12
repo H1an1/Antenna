@@ -56,6 +56,7 @@ PROFILE_SCHEMA = {
             "line3": {"type": "string", "description": "What you're looking for"},
             "visible": {"type": "boolean", "description": "Visible to others"},
             "matching_context": {"type": "string", "description": "Free-form context for AI matching (interests, goals, etc.)"},
+            "api_key": {"type": "string", "description": "Required for action='set': user's Antenna API key from antenna.fyi/me. Profile writes use the dashboard-linked user:<uuid> profile."},
         },
         "required": ["action", "sender_id", "channel", "chat_id"],
     },

@@ -68,10 +68,14 @@ export async function handleScan(f) {
 
 export async function handleProfile(f) {
   const id = resolveId(f);
-  if (!id) return console.error("Usage: antenna profile --id <platform>:<user_id> [--name Yi --personal-description '...' --looking-for '...' --conversation-style '...' --more-information '...' --tags 'AI,design,music' --city 'Beijing' --contact 'WeChat: yi' --slug mira --hide --visible true]");
+  if (!id) return console.error("Usage: antenna profile --id <platform>:<user_id> [--name Yi --personal-description '...' --looking-for '...' --conversation-style '...' --more-information '...' --tags 'AI,design,music' --city 'Beijing' --contact 'WeChat: yi' --slug mira --hide --visible true]\n  Writes require: antenna config --key <your-api-key>");
   if (f.name || f["personal-description"] !== undefined || f.line1 !== undefined || f["looking-for"] !== undefined || f.line2 !== undefined || f["conversation-style"] !== undefined || f.line3 !== undefined || f["more-information"] !== undefined || f.contact !== undefined || f.slug !== undefined || f.tags !== undefined || f.city !== undefined || f.visible !== undefined || f.hide !== undefined) {
+    const config = loadConfig();
+    if (!config.key) {
+      return console.error("❌ Profile writes require a dashboard API key. Run: antenna config --key <your-api-key>");
+    }
     const visible = f.hide ? false : (f.visible !== undefined ? f.visible === 'true' || f.visible === true : undefined);
-    const payload = { device_id: id };
+    const payload = { device_id: config.device_id || id, api_key: config.key };
     if (f.name) payload.display_name = f.name;
     if (f["personal-description"] !== undefined) payload.line1 = f["personal-description"];
     else if (f.line1 !== undefined) payload.line1 = f.line1;
@@ -85,8 +89,6 @@ export async function handleProfile(f) {
     if (f.tags !== undefined) payload.interest_tags = typeof f.tags === 'string' ? f.tags.split(',').map(t => t.trim()).filter(Boolean) : [f.tags];
     if (f.city !== undefined) payload.city = f.city;
         if (visible !== undefined) payload.visible = visible;
-    const config = loadConfig();
-    if (config.key) payload.api_key = config.key;
     const data = await setProfile(payload);
     if (data?.error) {
       console.error("❌ " + data.error);
@@ -445,7 +447,7 @@ export async function handleConfig(f) {
       }
       const config = loadConfig();
       config.key = f.key;
-      config.device_id = result.device_id;
+      config.device_id = result.user_id ? `user:${result.user_id}` : result.device_id;
       config.user_id = result.user_id;
       config.display_name = result.display_name;
       saveConfig(config);
@@ -1107,7 +1109,7 @@ Agent shortcuts:
 Usage:
   antenna scan       --lat 39.99 --lng 116.48 [--radius 500] (max 1000) [--id <platform>:<user_id>]
   antenna checkin    --id <platform>:<user_id> --lat 39.99 --lng 116.48
-  antenna profile    --id <platform>:<user_id> [--name Yi --personal-description '...' --looking-for '...' --conversation-style '...' --more-information '...' --tags 'AI,design,music' --city 'Beijing' --contact 'WeChat: yi' --slug mira --hide --visible true]
+  antenna profile    --id <platform>:<user_id> [--name Yi --personal-description '...' --looking-for '...' --conversation-style '...' --more-information '...' --tags 'AI,design,music' --city 'Beijing' --contact 'WeChat: yi' --slug mira --hide --visible true] (writes require antenna config --key)
   antenna accept     --id <platform>:<user_id> --target <ref_or_device_id> [--contact 'WeChat: yi']
   antenna pass       --id <platform>:<user_id> --target <ref_or_device_id> (or --ref 1)
   antenna matches    --id <platform>:<user_id>

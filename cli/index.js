@@ -41,8 +41,9 @@ async function main() {
     }
 
     case "profile": {
-      if (!f.id) return console.error("Usage: antenna profile --id telegram:123 [--name Yi --emoji 🦦 --line1 '...' --line2 '...' --line3 '...']");
+      if (!f.id) return console.error("Usage: antenna profile --id telegram:123 [--api-key ant_xxx --name Yi --emoji 🦦 --line1 '...' --line2 '...' --line3 '...']");
       if (f.name || f.line1 || f.line2 || f.line3) {
+        if (!f["api-key"]) return console.error("❌ Profile writes require a dashboard API key: --api-key ant_xxx");
         const data = await setProfile({
           device_id: f.id,
           display_name: f.name,
@@ -50,6 +51,7 @@ async function main() {
           line1: f.line1,
           line2: f.line2,
           line3: f.line3,
+          api_key: f["api-key"],
         });
         console.log("✅ Profile saved");
         console.log(JSON.stringify(data, null, 2));
@@ -137,7 +139,7 @@ Agent shortcuts:
 Usage:
   antenna scan     --lat 39.99 --lng 116.48 [--radius 500] [--id telegram:123]
   antenna checkin  --id telegram:123 --lat 39.99 --lng 116.48 [--place '三里屯']
-  antenna profile  --id telegram:123 [--name Yi --emoji 🦦 --line1 '...']
+  antenna profile  --id telegram:123 --api-key ant_xxx [--name Yi --emoji 🦦 --line1 '...']
   antenna accept   --id telegram:123 --target telegram:789 [--contact 'WeChat: yi']
   antenna matches  --id telegram:123
   antenna find     --id telegram:123 --query '想找一个懂 consumer social 增长的人' [--limit 3]

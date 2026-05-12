@@ -111,10 +111,19 @@ export async function setProfile({
   line2,
   line3,
   visible = true,
+  api_key,
   supabaseUrl,
   supabaseKey,
 }) {
   const sb = getClient(supabaseUrl, supabaseKey);
+  if (!api_key) {
+    throw new Error("Profile writes require the user's Antenna API key from antenna.fyi/me. Do not create an agent-only profile from sender_id/channel.");
+  }
+  const { data: auth, error: authError } = await sb.rpc("verify_api_key", { p_key: api_key });
+  if (authError) throw new Error(authError.message);
+  if (!auth?.valid) throw new Error(auth?.error || "Invalid Antenna API key");
+  device_id = auth.user_id ? `user:${auth.user_id}` : auth.device_id;
+  if (!device_id) throw new Error("API key verified but did not return a dashboard device_id");
   const { data, error } = await sb.rpc("upsert_profile", {
     p_device_id: device_id,
     p_display_name: display_name || null,
@@ -123,6 +132,7 @@ export async function setProfile({
     p_line2: line2 || null,
     p_line3: line3 || null,
     p_visible: visible,
+    p_api_key: api_key,
   });
   if (error) throw new Error(error.message);
   return data;

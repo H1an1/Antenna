@@ -301,6 +301,18 @@ export async function setProfile({
   supabaseKey,
 }) {
   const sb = getClient(supabaseUrl, supabaseKey);
+  if (!api_key) {
+    throw new Error("Profile writes require the user's Antenna API key from antenna.fyi/me. Do not create an agent-only profile from sender_id/channel.");
+  }
+  const auth = await verifyApiKey({ key: api_key, supabaseUrl, supabaseKey });
+  if (!auth?.valid) {
+    throw new Error(auth?.error || "Invalid Antenna API key");
+  }
+  const dashboardDeviceId = auth.user_id ? `user:${auth.user_id}` : auth.device_id;
+  if (!dashboardDeviceId) {
+    throw new Error("API key verified but did not return a dashboard device_id");
+  }
+  device_id = dashboardDeviceId;
 
   // Pack structured fields into matching_context JSON
   let contextJson = matching_context;
@@ -411,6 +423,7 @@ export async function setProfile({
               p_device_id: device_id,
               p_matching_context: JSON.stringify(ctx),
               p_visible: profile?.visible ?? true,
+              p_api_key: api_key,
             });
           } catch {}
         }
@@ -432,6 +445,8 @@ export async function setProfile({
     public_url: publicUrl,
     gps_bind_url: bindUrl,
     archetype: archetypeResult || null,
+    api_key_verified: true,
+    dashboard_device_id: device_id,
     next_step: "Send the public_url and gps_bind_url to the user. The GPS link should be opened on their phone to share location.",
   };
 }

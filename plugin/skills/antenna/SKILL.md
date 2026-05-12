@@ -25,6 +25,8 @@ Plugin 安装后,agent 应该**主动**开始引导,不要等用户问"怎么用
 **第一步:打招呼 + 解释**
 > "嘿,你装了 Antenna--它能帮你发现附近有意思的人。先确认一下,你在 antenna.fyi 注册过了吗?拿到 API key 了吗?有了的话我帮你做张名片,然后看看附近有谁。"
 
+**硬约束:** Profile 写入必须通过用户从 antenna.fyi/me 拿到的 API key。`antenna_profile(action="set")` 必须传 `api_key`，tool 会验证 key 并写入 dashboard 绑定的 `user:<uuid>` profile。不要自己拼 `channel:sender_id`，不要在用户拿到 API key 前凭空创建 profile。
+
 **第二步:聊天收集 → 生成名片 → 确认**
 
 Agent 跟用户聊几句,了解他们是谁、做什么、对什么感兴趣、想认识什么人。然后 agent 自己完成以下工作(不需要用户参与):
@@ -40,7 +42,7 @@ Agent 跟用户聊几句,了解他们是谁、做什么、对什么感兴趣、�
 >
 > 这样可以吗?要改哪里告诉我。
 
-用户确认后才调 `antenna_profile(action="set")` 保存(matching_context + line1/2/3 + emoji + name 一起存)。
+用户确认后才调 `antenna_profile(action="set", api_key="ant_xxx")` 保存(matching_context + line1/2/3 + emoji + name 一起存)。
 用户要改 → 改完重新预览 → 再确认。
 
 **不要跳过确认。名片是展示给别人看的,必须让用户看过才存。**
@@ -159,7 +161,8 @@ After receiving the nearby profiles, **you decide** who to recommend:
 View or update the user's name card.
 - `action`: "get" or "set"
 - `sender_id`, `channel`: from context
-- For "set": `display_name`, `emoji`, `line1`, `line2`, `line3`, `visible`, `matching_context`
+- For "set": `api_key`, `display_name`, `emoji`, `line1`, `line2`, `line3`, `visible`, `matching_context`
+- `api_key` is mandatory for writes. It must be the user's Antenna API key from antenna.fyi/me. The tool writes to the dashboard-linked `user:<uuid>` profile; do not create profiles from `sender_id/channel`.
 
 The name card has:
 - **emoji**: a single emoji that represents them
