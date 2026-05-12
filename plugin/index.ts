@@ -90,7 +90,7 @@ async function resolveDashboardDeviceId(supabase: SupabaseClient, apiKey: string
   const { data, error } = await supabase.rpc("verify_api_key", { p_key: apiKey });
   if (error) return { error: error.message };
   if (!data?.valid) return { error: data?.error || "Invalid Antenna API key" };
-  const deviceId = data.user_id ? `user:${data.user_id}` : data.device_id;
+  const deviceId = data.device_id || (data.user_id ? `user:${data.user_id}` : null);
   if (!deviceId) return { error: "API key verified but did not return a dashboard device_id" };
   return { deviceId, userId: data.user_id, displayName: data.display_name };
 }
@@ -612,13 +612,19 @@ export default function register(api: any) {
         target_device_id: { type: "string", description: "Device ID (use ref or profile_slug instead when possible)" },
         profile_slug: { type: "string", description: "Profile slug from a public profile link (e.g. 'yi' from antenna.fyi/p/yi). Resolves to device_id automatically." },
         contact_info: { type: "string", description: "Optional contact info to share" },
+        api_key: { type: "string", description: "User's Antenna API key from antenna.fyi/me. When provided, accept is written as the dashboard-linked profile, not a temporary sender/channel device." },
       },
       required: ["sender_id", "channel", "chat_id"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
-      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
+      let deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
+      if (params.api_key) {
+        const resolved = await resolveDashboardDeviceId(supabase, params.api_key);
+        if (resolved.error) return ok({ error: resolved.error });
+        deviceId = resolved.deviceId!;
+      }
 
       // Resolve ref to device_id — try DB first, then memory fallback
       let targetId = params.target_device_id;
@@ -658,6 +664,7 @@ export default function register(api: any) {
 
         return ok({
           accepted: true, mutual: true,
+          dashboard_device_id: deviceId,
           their_contact: reverse.contact_info_a || null,
           message: reverse.contact_info_a
             ? `双方都接受了！对方分享的联系方式：${reverse.contact_info_a}`
@@ -676,6 +683,7 @@ export default function register(api: any) {
 
       return ok({
         accepted: true, mutual: false,
+        dashboard_device_id: deviceId,
         message: "已接受。我会在接下来 2 小时内每 15 分钟检查一次对方是否回应，有消息第一时间告诉你。",
       });
     },

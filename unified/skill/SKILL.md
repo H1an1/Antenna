@@ -40,7 +40,7 @@ Plugin 安装后,agent **主动**开始引导,不要等用户问。
 
 用户给了 API key 后,调 `antenna config --key <key>` 验证。这会返回 `user_id` 和 dashboard 绑定的 `device_id`。
 
-**⚠️ Profile 写入必须通过用户的 Antenna API key。** 调 `antenna_profile(action="set")` 时传 `api_key`，tool 会验证 API key 并使用返回的 dashboard `device_id`(格式 `user:xxx`) 写入。不要自己拼 `channel:sender_id`，不要在用户拿到 API key 前凭空创建 profile。这样 agent 填的内容才会显示在 dashboard。
+**⚠️ Profile 写入和 accept 都必须尽量通过用户的 Antenna API key。** 调 `antenna_profile(action="set")` 时传 `api_key`，tool 会验证 API key 并使用返回的 dashboard-linked `device_id` 写入。调 `antenna_accept` 时如果用户已经有 API key，也传同一个 `api_key`，这样 match 会关联到用户的 dashboard profile，而不是临时 `sender_id/channel` profile。不要自己拼 `channel:sender_id`，不要在用户拿到 API key 前凭空创建 profile。这样 agent 填的内容和 match 才会显示在 dashboard。
 
 **第二步:聊天收集 → 生成名片 → 确认**
 
@@ -109,7 +109,7 @@ Legacy only: 如果用户之前通过旧版 agent 创建过 profile(没有网站
 - 用户分享位置 → `antenna_scan`
 - 用户问"附近有谁" → `antenna_scan`
 - 用户说"我想找一个 xxx 的人" → `antenna_find_people`
-- 用户收到 profile 链接(`antenna.fyi/p/xxx`)→ 读取 profile → 判断 → `antenna_accept`
+- 用户收到 profile 链接(`antenna.fyi/p/xxx`)→ 读取 profile → 判断 → `antenna_accept(profile_slug="xxx", api_key="ant_xxx")`
 - 用户想编辑名片 → `antenna_profile`
 - 用户说 accept / skip → `antenna_accept` / `antenna_pass`
 - 用户问匹配状态 → `antenna_check_matches`
@@ -140,7 +140,7 @@ Legacy only: 如果用户之前通过旧版 agent 创建过 profile(没有网站
 1. 用 `web_fetch` 读取页面--页面里有 `<script id="antenna-profile-data">` JSON,包含完整 profile
 2. 读取 more_information、interest_tags、个人描述等
 3. 结合你对用户的了解,判断是否推荐
-4. 如果用户想 accept → 调 `antenna_accept(profile_slug="xxx")`
+4. 如果用户想 accept → 调 `antenna_accept(profile_slug="xxx", api_key="ant_xxx")`
 
 **不需要先 scan。** Profile 链接是独立的发现路径。
 
@@ -183,6 +183,7 @@ Legacy only: 如果用户之前通过旧版 agent 创建过 profile(没有网站
   - `profile_slug`:来自 profile 链接(如 `antenna.fyi/p/yi` → `profile_slug="yi"`)
   - `target_device_id`:内部 ID(尽量用 ref 或 slug)
 - `contact_info`(可选):分享联系方式
+- `api_key`(强烈建议):用户从 dashboard 拿到的 Antenna API key。传了之后 accept 会写到 dashboard-linked profile；否则只能退回临时 `sender_id/channel` device，dashboard 关联可能不完整。
 
 ### `antenna_pass`
 跳过一个人,不再推荐。

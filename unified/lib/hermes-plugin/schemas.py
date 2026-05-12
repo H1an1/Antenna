@@ -91,6 +91,10 @@ ACCEPT_SCHEMA = {
                 "type": "string",
                 "description": "Contact info to share (e.g. 'WeChat: yi')",
             },
+            "api_key": {
+                "type": "string",
+                "description": "User's Antenna API key from antenna.fyi/me. When provided, accept is written as the dashboard-linked profile, not a temporary sender/channel device.",
+            },
         },
         "required": ["sender_id", "channel", "chat_id"],
     },

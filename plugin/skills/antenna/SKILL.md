@@ -25,7 +25,7 @@ Plugin 安装后,agent 应该**主动**开始引导,不要等用户问"怎么用
 **第一步:打招呼 + 解释**
 > "嘿,你装了 Antenna--它能帮你发现附近有意思的人。先确认一下,你在 antenna.fyi 注册过了吗?拿到 API key 了吗?有了的话我帮你做张名片,然后看看附近有谁。"
 
-**硬约束:** Profile 写入必须通过用户从 antenna.fyi/me 拿到的 API key。`antenna_profile(action="set")` 必须传 `api_key`，tool 会验证 key 并写入 dashboard 绑定的 `user:<uuid>` profile。不要自己拼 `channel:sender_id`，不要在用户拿到 API key 前凭空创建 profile。
+**硬约束:** Profile 写入必须通过用户从 antenna.fyi/me 拿到的 API key。`antenna_profile(action="set")` 必须传 `api_key`，tool 会验证 key 并写入 dashboard-linked profile。`antenna_accept` 在用户已有 API key 时也要传 `api_key`，否则 match 会写到临时 `sender_id/channel` device，dashboard 关联可能不完整。不要自己拼 `channel:sender_id`，不要在用户拿到 API key 前凭空创建 profile。
 
 **第二步:聊天收集 → 生成名片 → 确认**
 
@@ -181,7 +181,8 @@ After setting a profile, the tool returns `public_url`. **You must immediately s
 
 ### `antenna_accept`
 Accept a match after the user sees results. Can optionally include contact info to share.
-- `sender_id`, `channel`, `target_device_id`
+- `sender_id`, `channel`, `target_device_id` / `profile_slug` / `ref`
+- `api_key` (recommended): user's Antenna API key from antenna.fyi/me. Pass it so accept writes as the dashboard-linked profile.
 - `contact_info` (optional): e.g. "WeChat: yi_xxx" or "Telegram: @yi"
 
 ### `antenna_check_matches`
@@ -292,7 +293,7 @@ Source code is open: https://github.com/H1an1/Antenna
 
 ### Accepting & contact exchange
 When the user wants to accept a match:
-1. Call `antenna_accept` with the target's device_id
+1. Call `antenna_accept` with the target's ref/profile_slug/device_id and the user's `api_key` if available
 2. **立刻问**:"想分享什么联系方式给对方?微信号、Telegram、手机号、Instagram......随便哪个都行"
 3. 用户给了联系方式 → call `antenna_accept` again with `contact_info`
 4. 用户不想分享 → "也行,先 accept 着,以后想分享再说"

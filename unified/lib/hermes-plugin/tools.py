@@ -50,7 +50,7 @@ def _dashboard_device_id(sb, api_key: str | None) -> tuple[str | None, str | Non
     data = resp.data or {}
     if not data.get("valid"):
         return None, data.get("error") or "Invalid Antenna API key"
-    device_id = f"user:{data.get('user_id')}" if data.get("user_id") else data.get("device_id")
+    device_id = data.get("device_id") or (f"user:{data.get('user_id')}" if data.get("user_id") else None)
     if not device_id:
         return None, "API key verified but did not return a dashboard device_id"
     return device_id, None
@@ -253,6 +253,11 @@ def handle_profile(params: dict) -> str:
 def handle_accept(params: dict) -> str:
     sb = _sb()
     did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
+    if params.get("api_key"):
+        resolved_did, auth_error = _dashboard_device_id(sb, params.get("api_key"))
+        if auth_error:
+            return _ok({"error": auth_error})
+        did = resolved_did or did
 
     # Resolve ref to device_id
     ref = params.get("ref")
@@ -299,11 +304,12 @@ def handle_accept(params: dict) -> str:
     if reverse:
         contact = reverse.get("contact_info_a")
         msg = f"双方都接受了！对方分享的联系方式：{contact}" if contact else "双方都接受了！但对方还没有分享联系方式。"
-        return _ok({"accepted": True, "mutual": True, "their_contact": contact, "message": msg})
+        return _ok({"accepted": True, "mutual": True, "dashboard_device_id": did, "their_contact": contact, "message": msg})
 
     return _ok({
         "accepted": True,
         "mutual": False,
+        "dashboard_device_id": did,
         "message": "已接受。等对方也接受后，你们就可以交换联系方式了。",
     })
 

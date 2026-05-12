@@ -160,12 +160,13 @@ export async function startMcpServer() {
       target_device_id: z.string().optional().describe("Device ID (use ref or profile_slug instead when possible)"),
       profile_slug: z.string().optional().describe("Profile slug from a public profile link (e.g. 'yi' from antenna.fyi/p/yi). Resolves to device_id automatically."),
       contact_info: z.string().optional().describe("Contact info to share"),
+      api_key: z.string().optional().describe("User's Antenna API key from antenna.fyi/me. When provided, accept is written as the dashboard-linked profile, not a temporary sender/channel device."),
     },
-    async ({ sender_id, channel, ref, target_device_id, profile_slug, contact_info }) => {
+    async ({ sender_id, channel, ref, target_device_id, profile_slug, contact_info, api_key }) => {
       try {
         const deviceId = deriveDeviceId(sender_id, channel);
-        const result = await accept({ device_id: deviceId, target_device_id, ref, profile_slug, contact_info });
-        return jsonResult(await withMatchNotifications(deviceId, result));
+        const result = await accept({ device_id: deviceId, target_device_id, ref, profile_slug, contact_info, api_key });
+        return jsonResult(await withMatchNotifications(result.dashboard_device_id || deviceId, result));
       } catch (e) {
         return jsonResult({ error: e.message });
       }

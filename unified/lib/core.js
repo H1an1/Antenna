@@ -461,10 +461,18 @@ export async function accept({
   ref,
   profile_slug,
   contact_info,
+  api_key,
   supabaseUrl,
   supabaseKey,
 }) {
   const sb = getClient(supabaseUrl, supabaseKey);
+  if (api_key) {
+    const auth = await verifyApiKey({ key: api_key, supabaseUrl, supabaseKey });
+    if (!auth?.valid) {
+      throw new Error(auth?.error || "Invalid Antenna API key");
+    }
+    device_id = auth.device_id || (auth.user_id ? `user:${auth.user_id}` : device_id);
+  }
 
   // Resolve ref from DB if target_device_id not provided
   let targetId = target_device_id;
@@ -509,6 +517,7 @@ export async function accept({
   return {
     accepted: true,
     mutual,
+    dashboard_device_id: device_id,
     their_contact: mutual ? reverse?.contact_info_a || null : null,
     message: mutual
       ? "双向匹配成功！🎉"
