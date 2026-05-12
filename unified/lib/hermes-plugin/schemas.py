@@ -420,3 +420,23 @@ INITIAL_RECOMMENDATIONS_SCHEMA = {
         "required": ["sender_id", "channel", "chat_id"],
     },
 }
+
+FIND_PEOPLE_SCHEMA = {
+    "name": "antenna_find_people",
+    "description": (
+        "Find 1-3 people by a free-form intent, e.g. "
+        "'想找一个懂 consumer social 增长的人'. Returns privacy-safe refs; "
+        "use ref with antenna_accept if the user wants an intro."
+    ),
+    "parameters": {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Free-form user intent describing the kind of person to find"},
+            "sender_id": {"type": "string", "description": "The sender's user ID"},
+            "channel": {"type": "string", "description": "Platform name (any platform works)"},
+            "chat_id": {"type": "string", "description": "REQUIRED for notifications. Pass chat/channel ID from message context."},
+            "limit": {"type": "number", "description": "Maximum profiles to return, 1-3"},
+        },
+        "required": ["query", "sender_id", "channel", "chat_id"],
+    },
+}

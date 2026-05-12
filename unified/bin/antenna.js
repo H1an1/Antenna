@@ -8,6 +8,7 @@ import {
   handleCheckin,
   handleMatches,
   handleDiscover,
+  handleFindPeople,
   handleEvent,
   handleBind,
   handlePass,
@@ -40,6 +41,9 @@ async function main() {
       return handleMatches(f);
     case "discover":
       return handleDiscover(f);
+    case "find":
+    case "find-people":
+      return handleFindPeople(f);
     case "event":
       return handleEvent(f);
     case "drift":

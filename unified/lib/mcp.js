@@ -14,6 +14,7 @@ import {
   createBindToken,
   discover,
   initialRecommendations,
+  findPeople,
   createEvent,
   endEvent,
   eventCheckin,
@@ -283,6 +284,33 @@ export async function startMcpServer() {
           return jsonResult(clean);
         }
         return jsonResult(result);
+      } catch (e) {
+        return jsonResult({ error: e.message });
+      }
+    }
+  );
+
+  // ─── antenna_find_people ─────────────────────────────────────
+
+  server.tool(
+    "antenna_find_people",
+    "Find 1-3 people by a free-form intent, e.g. '找一个懂 consumer social 增长的人'. Returns privacy-safe profile refs; use ref with antenna_accept if the user wants an intro.",
+    {
+      query: z.string().describe("Free-form user intent describing the kind of person to find"),
+      sender_id: z.string().describe("The sender's user ID"),
+      channel: z.string().describe("Channel name"),
+      limit: z.number().optional().default(3).describe("Maximum profiles to return, 1-3"),
+    },
+    async ({ query, sender_id, channel, limit }) => {
+      try {
+        const deviceId = deriveDeviceId(sender_id, channel);
+        const result = await findPeople({ query, device_id: deviceId, limit });
+        if (result._ref_map) {
+          _lastRefMap = { ..._lastRefMap, ...result._ref_map };
+          const { _ref_map, ...clean } = result;
+          return jsonResult(await withMatchNotifications(deviceId, clean));
+        }
+        return jsonResult(await withMatchNotifications(deviceId, result));
       } catch (e) {
         return jsonResult({ error: e.message });
       }

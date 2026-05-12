@@ -13,6 +13,7 @@ Antenna 帮你的用户发现值得认识的人。不只是"附近的人"--profi
 发现可以来自任何渠道:
 - 📡 **附近扫描** - `antenna_scan`,基于 GPS 的周边发现
 - 🌍 **全球推荐** - `antenna_discover`,每天 1 个最匹配的人
+- 🔎 **意图找人** - `antenna_find_people`,用户直接说"我想找一个 xxx 的人"
 - 🔗 **Profile 链接** - 用户收到 `antenna.fyi/p/xxx` 链接,agent 读取后直接 accept
 - 🎪 **活动** - `antenna_event_scan`,同一个活动里的人
 
@@ -103,6 +104,7 @@ openclaw cron add --every 1h --message "Check antenna matches: call antenna_chec
 - **首次安装后**:主动 onboarding
 - 用户分享位置 → `antenna_scan`
 - 用户问"附近有谁" → `antenna_scan`
+- 用户说"我想找一个 xxx 的人" → `antenna_find_people`
 - 用户收到 profile 链接(`antenna.fyi/p/xxx`)→ 读取 profile → 判断 → `antenna_accept`
 - 用户想编辑名片 → `antenna_profile`
 - 用户说 accept / skip → `antenna_accept` / `antenna_pass`
@@ -119,7 +121,15 @@ openclaw cron add --every 1h --message "Check antenna matches: call antenna_chec
 每天 1 个全球最匹配的人,不需要 GPS。
 - 用在日常 cron 里,或用户主动要求
 
-### 3. Profile 链接
+### 3. 意图找人(antenna_find_people)
+用户直接提出想认识的人,例如"想找一个懂 consumer social 增长的人"、"找一个做 AI hardware 的人"。
+- 输入用户原话作为 `query`
+- 返回 1-3 个候选 profile,包含 `ref`、`profile_slug`、三段名片、`more_information`、`interest_tags`、city 和推荐理由
+- 不返回联系方式或 raw `device_id`
+- 你仍然要结合上下文判断是否推荐,不要机械展示所有结果
+- 用户想认识某人时,用 `ref` 调 `antenna_accept`
+
+### 4. Profile 链接
 用户收到 `antenna.fyi/p/xxx` 链接时:
 1. 用 `web_fetch` 读取页面--页面里有 `<script id="antenna-profile-data">` JSON,包含完整 profile
 2. 读取 more_information、interest_tags、个人描述等
@@ -128,7 +138,7 @@ openclaw cron add --every 1h --message "Check antenna matches: call antenna_chec
 
 **不需要先 scan。** Profile 链接是独立的发现路径。
 
-### 4. 活动(Events)
+### 5. 活动(Events)
 同一个活动里的人。详见 EVENTS.md。
 
 ## Tools
@@ -196,6 +206,14 @@ openclaw cron add --every 1h --message "Check antenna matches: call antenna_chec
 - `sender_id`, `channel`, `chat_id`
 - 不需要 GPS
 - 如果所有人都推荐过了,返回"等新人加入"
+
+### `antenna_find_people`
+意图找人--根据用户自然语言需求搜索 1-3 个相关的人。
+- `query`:用户原话,如"想找一个懂 consumer social 增长的人"
+- `sender_id`, `channel`, `chat_id`
+- `limit`:1-3,默认 3
+- 返回 `profiles`,每个 profile 有 `ref`, `display_name`, `profile_slug`, `personal_description`, `looking_for`, `conversation_style`, `more_information`, `interest_tags`, `city`, `recommendation_reason`
+- 不会返回联系方式或 raw `device_id`
 
 ### `antenna_initial_recommendations`
 首次推荐--注册后立刻看到 2-3 个最匹配的人。

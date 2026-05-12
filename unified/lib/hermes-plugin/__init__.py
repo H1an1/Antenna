@@ -22,6 +22,7 @@ from .tools import (
     handle_bind,
     handle_pass,
     handle_discover,
+    handle_find_people,
     handle_event_create,
     handle_event_join,
     handle_event_scan,
@@ -47,6 +48,7 @@ from .schemas import (
     BIND_SCHEMA,
     PASS_SCHEMA,
     DISCOVER_SCHEMA,
+    FIND_PEOPLE_SCHEMA,
     EVENT_CREATE_SCHEMA,
     EVENT_JOIN_SCHEMA,
     EVENT_SCAN_SCHEMA,
@@ -83,6 +85,7 @@ def register(ctx):
     ctx.register_tool("antenna_bind", BIND_SCHEMA, handle_bind)
     ctx.register_tool("antenna_pass", PASS_SCHEMA, handle_pass)
     ctx.register_tool("antenna_discover", DISCOVER_SCHEMA, handle_discover)
+    ctx.register_tool("antenna_find_people", FIND_PEOPLE_SCHEMA, handle_find_people)
     ctx.register_tool("antenna_event_create", EVENT_CREATE_SCHEMA, handle_event_create)
     ctx.register_tool("antenna_event_join", EVENT_JOIN_SCHEMA, handle_event_join)
     ctx.register_tool("antenna_event_scan", EVENT_SCAN_SCHEMA, handle_event_scan)

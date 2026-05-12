@@ -122,6 +122,32 @@ function ok(data: any) {
   return { content: [{ type: "text", text: JSON.stringify(data) }] };
 }
 
+async function generateEmbeddingForQuery(cfg: AntennaConfig, text: string): Promise<number[] | null> {
+  try {
+    const supabaseUrl = cfg.supabaseUrl || BUILTIN_SUPABASE_URL;
+    const supabaseKey = cfg.supabaseKey || BUILTIN_SUPABASE_ANON_KEY;
+    const res = await fetch(`${supabaseUrl}/functions/v1/generate-embedding`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${supabaseKey}` },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.embedding || null;
+  } catch {
+    return null;
+  }
+}
+
+function intentSearchReason(query: string, profile: any): string {
+  if (profile.recommendation_reason) return profile.recommendation_reason;
+  const tags = Array.isArray(profile.interest_tags) && profile.interest_tags.length
+    ? ` Tags: ${profile.interest_tags.slice(0, 3).join(", ")}.`
+    : "";
+  const score = typeof profile.match_score === "number" ? ` Score: ${profile.match_score.toFixed(2)}.` : "";
+  return `Matches the intent "${query}".${tags}${score}`.trim();
+}
+
 // ─── Cron helpers ────────────────────────────────────────────────────
 
 const FOLLOW_UP_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
@@ -317,7 +343,16 @@ export default function register(api: any) {
           const gProfiles = globalOthers.map((p: any, i: number) => {
             const ref = String(i + 1);
             gRefMap[ref] = p.device_id;
-            return { ref, emoji: p.emoji || "👤", name: p.display_name || "匿名", line1: p.line1, line2: p.line2, line3: p.line3, more_information: p.matching_context || null, profile_slug: p.profile_slug || null };
+            return {
+              ref: ref,
+              name: p.display_name || "匿名",
+              personal_description: p.line1,
+              looking_for: p.line2,
+              conversation_style: p.line3,
+              more_information: p.matching_context || null,
+              profile_slug: p.profile_slug || null,
+              distance_m: p.distance_m ?? p.dist_meters ?? null,
+            };
           });
           (api as any)._antennaRefMap = gRefMap;
           try { await supabase.rpc("save_scan_refs", { p_owner: deviceId, p_refs: gRefMap }); } catch {}
@@ -338,12 +373,11 @@ export default function register(api: any) {
         const ref = String(i + 1);
         _refMap[ref] = p.device_id;
         return {
-          ref,
-          emoji: p.emoji || "👤",
+          ref: ref,
           name: p.display_name || "匿名",
-          line1: p.line1,
-          line2: p.line2,
-          line3: p.line3,
+          personal_description: p.line1,
+          looking_for: p.line2,
+          conversation_style: p.line3,
           more_information: p.matching_context || null,
           profile_slug: p.profile_slug || null,
           distance_m: p.distance_m ?? p.dist_meters ?? null,
@@ -752,7 +786,16 @@ export default function register(api: any) {
           } catch { /* best effort */ }
         }
 
-        profiles.push({ ref, emoji: p.emoji || "👤", name: p.display_name || "匿名", line1: p.line1, line2: p.line2, line3: p.line3, more_information: p.matching_context || null, profile_slug: p.profile_slug || null, match_reason });
+        profiles.push({
+          ref: ref,
+          name: p.display_name || "匿名",
+          personal_description: p.line1,
+          looking_for: p.line2,
+          conversation_style: p.line3,
+          more_information: p.matching_context || null,
+          profile_slug: p.profile_slug || null,
+          match_reason: match_reason,
+        });
       }
 
       // Persist refs + log recommendation
@@ -767,6 +810,79 @@ export default function register(api: any) {
       return ok({
         count: profiles.length, profiles, global: true,
         message: "🌍 今天的全球推荐——这个人跟你可能聊得来。",
+      });
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Tool: antenna_find_people
+  // ═══════════════════════════════════════════════════════════════════
+  api.registerTool({
+    name: "antenna_find_people",
+    description:
+      "Find 1-3 people by a free-form intent, e.g. '想找一个懂 consumer social 增长的人'. Returns privacy-safe refs; use ref with antenna_accept if the user wants an intro.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Free-form user intent describing the kind of person to find" },
+        sender_id: { type: "string", description: "The sender's user ID" },
+        channel: { type: "string", description: "The channel name" },
+        chat_id: { type: "string", description: "REQUIRED for notifications. Pass the chat/channel ID from your message context so Antenna can send you match and event notifications." },
+        limit: { type: "number", description: "Maximum profiles to return, 1-3" },
+      },
+      required: ["query", "sender_id", "channel", "chat_id"],
+    },
+    async execute(_id: string, params: any) {
+      const cfg = getConfig(api);
+      const supabase = getSupabase(cfg);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel, params.chat_id);
+      const query = String(params.query || "").trim();
+      const limit = Math.min(Math.max(Number(params.limit) || 3, 1), 3);
+
+      if (query.length < 2) {
+        return ok({ count: 0, profiles: [], message: "Tell me what kind of person you want to find." });
+      }
+
+      const embedding = await generateEmbeddingForQuery(cfg, query);
+      const { data, error } = await supabase.rpc("antenna_intent_search_people", {
+        p_device_id: deviceId,
+        p_query: query,
+        p_query_embedding: embedding ? `[${embedding.join(",")}]` : null,
+        p_limit: limit,
+      });
+      if (error) return ok({ error: error.message });
+
+      const _refMap: Record<string, string> = {};
+      const profiles = (data || []).map((p: any, i: number) => {
+        const ref = String(i + 1);
+        _refMap[ref] = p.device_id;
+        return {
+          ref: ref,
+          display_name: p.display_name || "匿名",
+          profile_slug: p.profile_slug || null,
+          personal_description: p.personal_description || null,
+          looking_for: p.looking_for || null,
+          conversation_style: p.conversation_style || null,
+          more_information: p.more_information || null,
+          interest_tags: p.interest_tags || [],
+          city: p.city || null,
+          match_score: typeof p.match_score === "number" ? Math.round(p.match_score * 1000) / 1000 : null,
+          recommendation_reason: intentSearchReason(query, p),
+        };
+      });
+
+      (api as any)._antennaRefMap = { ...(api as any)._antennaRefMap, ..._refMap };
+      if (Object.keys(_refMap).length > 0) {
+        try { await supabase.rpc("save_scan_refs", { p_owner: deviceId, p_refs: _refMap }); } catch {}
+      }
+
+      return ok({
+        count: profiles.length,
+        profiles,
+        query,
+        message: profiles.length
+          ? "Intent search results. Recommend only the best fit(s), then use ref with antenna_accept if the user wants an intro."
+          : "No relevant active profiles found for that intent right now.",
       });
     },
   });
@@ -1046,7 +1162,20 @@ export default function register(api: any) {
       const profiles = others.map((p, i) => {
         const ref = String(i + 1);
         _refMap[ref] = p.device_id;
-        return { ref, emoji: p.emoji || "👤", name: p.display_name || "匿名", line1: p.line1, line2: p.line2, line3: p.line3, more_information: p.matching_context || null, profile_slug: p.profile_slug || null, checked_in: !!p.checked_in, role: p.role || "participant", status: p.status || "active", application_context: p.application_context || null, source: "event" };
+        return {
+          ref: ref,
+          name: p.display_name || "匿名",
+          personal_description: p.line1,
+          looking_for: p.line2,
+          conversation_style: p.line3,
+          more_information: p.matching_context || null,
+          profile_slug: p.profile_slug || null,
+          checked_in: !!p.checked_in,
+          role: p.role || "participant",
+          status: p.status || "active",
+          application_context: p.application_context || null,
+          source: "event",
+        };
       });
 
       (api as any)._antennaRefMap = { ...(api as any)._antennaRefMap, ..._refMap };

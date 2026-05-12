@@ -114,6 +114,7 @@ openclaw cron add --every 1h --message "Check antenna matches: call antenna_chec
 - **首次安装后**: 主动开始 onboarding(名片 → 位置)
 - User shares a location (Telegram live location, WhatsApp pin, or tells you where they are)
 - User asks "附近有谁" / "who's nearby" / "周围有什么人"
+- User says "我想找一个 xxx 的人" / "find me someone who..."
 - User wants to set up or edit their profile card (名片)
 - User accepts or skips a match
 - User asks about match status or wants to exchange contact info
@@ -197,6 +198,15 @@ Get today's global recommendation - the person most similar to you worldwide. 1 
 - Returns 1 profile (embedding similarity match) that hasn't been recommended before
 - If all users have been recommended, returns a message saying "wait for new people"
 - Use this in the daily cron job, or when user asks "find someone interesting globally"
+
+### `antenna_find_people`
+Find 1-3 people by free-form intent.
+- `query`: user's exact intent, e.g. "想找一个懂 consumer social 增长的人"
+- `sender_id`, `channel`, `chat_id`: from context
+- `limit`: 1-3, default 3
+- Returns privacy-safe profiles with `ref`, `display_name`, `profile_slug`, three card fields, `more_information`, `interest_tags`, `city`, and `recommendation_reason`
+- Does not return contact info or raw `device_id`
+- If the user wants an intro, call `antenna_accept` with the returned `ref`
 
 ### `antenna_pass`
 Pass/skip a person. They won't be recommended again.

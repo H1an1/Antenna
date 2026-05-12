@@ -75,6 +75,30 @@ def _ok(data) -> str:
     return json.dumps(data, ensure_ascii=False)
 
 
+def _generate_embedding(text: str):
+    try:
+        req = urllib.request.Request(
+            f"{_get_url()}/functions/v1/generate-embedding",
+            data=json.dumps({"text": text}).encode(),
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {_get_key()}"},
+        )
+        res = urllib.request.urlopen(req, timeout=15)
+        body = json.loads(res.read().decode())
+        return body.get("embedding")
+    except Exception:
+        return None
+
+
+def _search_reason(query: str, profile: dict) -> str:
+    if profile.get("recommendation_reason"):
+        return profile["recommendation_reason"]
+    tags = profile.get("interest_tags") or []
+    tag_text = f" Tags: {', '.join(tags[:3])}." if tags else ""
+    score = profile.get("match_score")
+    score_text = f" Score: {score:.2f}." if isinstance(score, (int, float)) else ""
+    return f'Matches the intent "{query}".{tag_text}{score_text}'.strip()
+
+
 # ─── Handlers ─────────────────────────────────────────────────────────
 
 def handle_scan(params: dict) -> str:
@@ -123,9 +147,9 @@ def handle_scan(params: dict) -> str:
         profiles.append({
             "ref": ref,
             "name": p.get("display_name") or "匿名",
-            "line1": p.get("line1"),
-            "line2": p.get("line2"),
-            "line3": p.get("line3"),
+            "personal_description": p.get("line1"),
+            "looking_for": p.get("line2"),
+            "conversation_style": p.get("line3"),
             "more_information": p.get("matching_context") or None,
             "profile_slug": p.get("profile_slug") or None,
             "distance_m": p.get("distance_m") or p.get("dist_meters"),
@@ -387,14 +411,13 @@ def handle_discover(params: dict) -> str:
         profile = {
             "ref": ref,
             "name": p.get("display_name") or "匿名",
-            "line1": p.get("line1"),
-            "line2": p.get("line2"),
-            "line3": p.get("line3"),
+            "personal_description": p.get("line1"),
+            "looking_for": p.get("line2"),
+            "conversation_style": p.get("line3"),
             "more_information": p.get("matching_context") or None,
             "profile_slug": p.get("profile_slug") or None,
+            "match_reason": match_reason,
         }
-        if match_reason:
-            profile["match_reason"] = match_reason
         profiles.append(profile)
 
     # Save refs and log recommendations
@@ -412,6 +435,63 @@ def handle_discover(params: dict) -> str:
         "count": len(profiles),
         "profiles": profiles,
         "instruction": "这是全球推荐。根据你对用户的了解，判断是否值得推荐，写一句个性化的匹配理由。使用 ref 编号引用。",
+    })
+
+
+def handle_find_people(params: dict) -> str:
+    sb = _sb()
+    did = _device_id(params["sender_id"], params["channel"], params.get("chat_id"))
+    query = (params.get("query") or "").strip()
+    limit = max(1, min(int(params.get("limit") or 3), 3))
+
+    if len(query) < 2:
+        return _ok({"count": 0, "profiles": [], "message": "Tell me what kind of person you want to find."})
+
+    embedding = _generate_embedding(query)
+    emb_text = f"[{','.join(str(x) for x in embedding)}]" if embedding else None
+    resp = sb.rpc("antenna_intent_search_people", {
+        "p_device_id": did,
+        "p_query": query,
+        "p_query_embedding": emb_text,
+        "p_limit": limit,
+    }).execute()
+    results = resp.data or []
+
+    global _last_ref_map
+    _last_ref_map = {}
+    profiles = []
+    for i, p in enumerate(results):
+        ref = str(i + 1)
+        _last_ref_map[ref] = p.get("device_id")
+        profiles.append({
+            "ref": ref,
+            "display_name": p.get("display_name") or "匿名",
+            "profile_slug": p.get("profile_slug"),
+            "personal_description": p.get("personal_description"),
+            "looking_for": p.get("looking_for"),
+            "conversation_style": p.get("conversation_style"),
+            "more_information": p.get("more_information"),
+            "interest_tags": p.get("interest_tags") or [],
+            "city": p.get("city"),
+            "match_score": p.get("match_score"),
+            "recommendation_reason": _search_reason(query, p),
+        })
+
+    if did and _last_ref_map:
+        try:
+            sb.rpc("save_scan_refs", {"p_owner": did, "p_refs": _last_ref_map}).execute()
+        except Exception:
+            pass
+
+    return _ok({
+        "count": len(profiles),
+        "profiles": profiles,
+        "query": query,
+        "message": (
+            "Intent search results. Recommend only the best fit(s), then use ref with antenna_accept if the user wants an intro."
+            if profiles else
+            "No relevant active profiles found for that intent right now."
+        ),
     })
 
 
@@ -560,9 +640,9 @@ def handle_event_scan(params: dict) -> str:
         profiles.append({
             "ref": ref,
             "name": p.get("display_name") or "匿名",
-            "line1": p.get("line1"),
-            "line2": p.get("line2"),
-            "line3": p.get("line3"),
+            "personal_description": p.get("line1"),
+            "looking_for": p.get("line2"),
+            "conversation_style": p.get("line3"),
             "more_information": p.get("matching_context") or None,
             "profile_slug": p.get("profile_slug") or None,
             "checked_in": bool(p.get("checked_in")),

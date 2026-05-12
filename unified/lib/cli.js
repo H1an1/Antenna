@@ -1,6 +1,6 @@
 // antenna CLI command handlers
 
-import { scan, getProfile, setProfile, accept, checkMatches, checkin, createBindToken, discover, createEvent, endEvent, eventCheckin, joinEvent, eventScan, pass as passUser, uploadEventImage, updateEvent, approveParticipant, rejectParticipant, addCohost, sendEventMessage, getMyEventMessages, getClient, verifyApiKey, linkAccount, initialRecommendations, throwDriftBottle, pickDriftBottle, replyDriftBottle, checkDriftBottles, getMyBottles } from "./core.js";
+import { scan, getProfile, setProfile, accept, checkMatches, checkin, createBindToken, discover, findPeople, createEvent, endEvent, eventCheckin, joinEvent, eventScan, pass as passUser, uploadEventImage, updateEvent, approveParticipant, rejectParticipant, addCohost, sendEventMessage, getMyEventMessages, getClient, verifyApiKey, linkAccount, initialRecommendations, throwDriftBottle, pickDriftBottle, replyDriftBottle, checkDriftBottles, getMyBottles } from "./core.js";
 import { createInterface } from "readline";
 import { existsSync, mkdirSync, copyFileSync, readFileSync, writeFileSync, unlinkSync, renameSync } from "fs";
 import path from "path";
@@ -14,7 +14,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
 export function parseFlags(args) {
-  const flags = {};
+  const flags = { _: [] };
   for (let i = 0; i < args.length; i++) {
     if (args[i].startsWith("--")) {
       const key = args[i].slice(2);
@@ -25,6 +25,8 @@ export function parseFlags(args) {
       } else {
         flags[key] = true;
       }
+    } else {
+      flags._.push(args[i]);
     }
   }
   return flags;
@@ -175,6 +177,25 @@ export async function handleDiscover(f) {
     if (p.looking_for) console.log(`    ${p.looking_for}`);
     if (p.conversation_style) console.log(`    ${p.conversation_style}`);
     if (p.match_reason) console.log(`    → ${p.match_reason}`);
+    console.log(`    ref: ${p.ref}\n`);
+  });
+}
+
+export async function handleFindPeople(f) {
+  const id = resolveId(f);
+  const query = f.query || f.q || f._?.join(" ");
+  if (!id || !query) return console.error("Usage: antenna find --id <platform>:<user_id> --query '想找一个懂 consumer social 增长的人' [--limit 3]");
+  const result = await findPeople({ device_id: id, query, limit: +(f.limit || 3) });
+  if (result.count === 0) return console.log(result.message || "No relevant profiles found.");
+  console.log(`🔎 Intent search: ${result.query}\n`);
+  result.profiles.forEach((p) => {
+    console.log(`  ${p.display_name}`);
+    if (p.personal_description) console.log(`    ${p.personal_description}`);
+    if (p.looking_for) console.log(`    Looking for: ${p.looking_for}`);
+    if (p.conversation_style) console.log(`    Conversation: ${p.conversation_style}`);
+    if (p.interest_tags?.length) console.log(`    Tags: ${p.interest_tags.join(", ")}`);
+    if (p.city) console.log(`    ${p.city}`);
+    if (p.recommendation_reason) console.log(`    → ${p.recommendation_reason}`);
     console.log(`    ref: ${p.ref}\n`);
   });
 }
@@ -1085,6 +1106,7 @@ Usage:
   antenna pass       --id <platform>:<user_id> --target <ref_or_device_id> (or --ref 1)
   antenna matches    --id <platform>:<user_id>
   antenna discover   --id <platform>:<user_id>
+  antenna find       --id <platform>:<user_id> --query '想找一个懂 consumer social 增长的人' [--limit 3]
   antenna event      --create --name 'AI Meetup' --starts-at '...' --ends-at '...' [--lat 34.05 --lng -118.25] [--desc '...'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2'] | --join --code abc123 | --scan --code abc123 | --end --code abc123 --id <platform>:<user_id> | --upload-image --code abc123 --file /path/to/image.png | --update --code abc123 --name 'New Name' | --approve --code abc123 --ref 1 | --reject --code abc123 --ref 1 | --add-host --code abc123 --ref 1
   antenna drift      --throw --message 'hello' | --pick | --reply --bottle-id <uuid> --message 'reply' | --check | --my-bottles  --id <platform>:<user_id>
   antenna watch       --id <platform>:<user_id> [--push hermes|openclaw|terminal]  Watch for new matches in real-time (Ctrl+C to stop)

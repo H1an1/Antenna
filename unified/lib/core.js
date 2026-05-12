@@ -12,14 +12,15 @@ let _url = null;
 
 // ─── Embedding & Match Reason (via Supabase Edge Functions) ───────
 
-async function generateEmbedding(text) {
+async function generateEmbedding(text, supabaseUrl, supabaseKey) {
   try {
-    const sb = getClient();
+    getClient(supabaseUrl, supabaseKey);
+    const key = supabaseKey || process.env.ANTENNA_SUPABASE_KEY || process.env.ANTENNA_KEY || DEFAULT_KEY;
     const res = await fetch(`${_url || DEFAULT_URL}/functions/v1/generate-embedding`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": `Bearer ${process.env.ANTENNA_SUPABASE_KEY || process.env.ANTENNA_KEY || DEFAULT_KEY}`,
+        "Authorization": `Bearer ${key}`,
       },
       body: JSON.stringify({ text }),
     });
@@ -27,6 +28,31 @@ async function generateEmbedding(text) {
     const data = await res.json();
     return data?.embedding || null;
   } catch { return null; }
+}
+
+function profileSearchReason(query, profile) {
+  if (profile.recommendation_reason) return profile.recommendation_reason;
+  const tags = Array.isArray(profile.interest_tags) && profile.interest_tags.length
+    ? ` Tags: ${profile.interest_tags.slice(0, 3).join(", ")}.`
+    : "";
+  const score = typeof profile.match_score === "number" ? ` Score: ${profile.match_score.toFixed(2)}.` : "";
+  return `Matches the intent "${query}".${tags}${score}`.trim();
+}
+
+function mapSearchProfile(p, ref, query) {
+  return {
+    ref: ref,
+    display_name: p.display_name || "匿名",
+    profile_slug: p.profile_slug || null,
+    personal_description: p.personal_description ?? p.line1 ?? null,
+    looking_for: p.looking_for ?? p.line2 ?? null,
+    conversation_style: p.conversation_style ?? p.line3 ?? null,
+    more_information: p.more_information ?? p.matching_context ?? null,
+    interest_tags: p.interest_tags || [],
+    city: p.city || null,
+    match_score: typeof p.match_score === "number" ? Math.round(p.match_score * 1000) / 1000 : null,
+    recommendation_reason: profileSearchReason(query, p),
+  };
 }
 
 async function generateMatchReason(myLines, theirLines) {
@@ -119,7 +145,7 @@ export async function scan({ lat, lng, radius_m = 500, device_id, supabaseUrl, s
     const ref = String(i + 1);
     _refMap[ref] = p.device_id;
     return {
-      ref,
+      ref: ref,
       name: p.display_name || "匿名",
       personal_description: p.line1,
       looking_for: p.line2,
@@ -318,7 +344,7 @@ export async function setProfile({
     const textParts = [line1, line2, line3, matching_context].filter(Boolean);
     const text = textParts.join(". ");
     if (text) {
-      const embedding = await generateEmbedding(text);
+      const embedding = await generateEmbedding(text, supabaseUrl, supabaseKey);
       if (embedding) {
         await sb.rpc("update_profile_embedding", {
           p_device_id: device_id,
@@ -586,7 +612,7 @@ export async function discover({ device_id, supabaseUrl, supabaseKey }) {
     }
 
     profiles.push({
-      ref,
+      ref: ref,
       name: p.display_name || "匿名",
       personal_description: p.line1,
       looking_for: p.line2,
@@ -692,6 +718,50 @@ export async function initialRecommendations({ device_id, supabaseUrl, supabaseK
     _ref_map: _refMap,
     initial: true,
     message: "这是你的首次推荐——基于你的名片，这几个人跟你最匹配。",
+  };
+}
+
+// ─── findPeople (intent-based search) ───────────────────────────────
+
+export async function findPeople({ query, device_id, limit = 3, supabaseUrl, supabaseKey }) {
+  const sb = getClient(supabaseUrl, supabaseKey);
+  const cleanQuery = String(query || "").trim();
+  const cappedLimit = Math.min(Math.max(Number(limit) || 3, 1), 3);
+
+  if (cleanQuery.length < 2) {
+    return { count: 0, profiles: [], message: "Tell me what kind of person you want to find." };
+  }
+
+  const embedding = await generateEmbedding(cleanQuery, supabaseUrl, supabaseKey);
+  const { data, error } = await sb.rpc("antenna_intent_search_people", {
+    p_device_id: device_id,
+    p_query: cleanQuery,
+    p_query_embedding: embedding ? `[${embedding.join(",")}]` : null,
+    p_limit: cappedLimit,
+  });
+
+  if (error) throw new Error(error.message);
+
+  const results = data || [];
+  const _refMap = {};
+  const profiles = results.map((p, i) => {
+    const ref = String(i + 1);
+    _refMap[ref] = p.device_id;
+    return mapSearchProfile(p, ref, cleanQuery);
+  });
+
+  if (device_id && Object.keys(_refMap).length > 0) {
+    try { await sb.rpc("save_scan_refs", { p_owner: device_id, p_refs: _refMap }); } catch {}
+  }
+
+  return {
+    count: profiles.length,
+    profiles,
+    _ref_map: _refMap,
+    query: cleanQuery,
+    message: profiles.length
+      ? "Intent search results. Recommend only the best fit(s), then use ref with antenna_accept if the user wants an intro."
+      : "No relevant active profiles found for that intent right now.",
   };
 }
 
@@ -852,7 +922,7 @@ export async function eventScan({ code, device_id, supabaseUrl, supabaseKey }) {
     _refMap[ref] = p.device_id;
     if (p.checked_in) checkedInCount++;
     return {
-      ref,
+      ref: ref,
       name: p.display_name || "匿名",
       personal_description: p.line1,
       looking_for: p.line2,

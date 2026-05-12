@@ -105,6 +105,30 @@ function ok(data: any) {
   return { content: [{ type: "text", text: JSON.stringify(data) }] };
 }
 
+async function generateEmbeddingForQuery(cfg: AntennaConfig, text: string): Promise<number[] | null> {
+  try {
+    const res = await fetch(`${cfg.supabaseUrl}/functions/v1/generate-embedding`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${cfg.supabaseKey}` },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.embedding || null;
+  } catch {
+    return null;
+  }
+}
+
+function intentSearchReason(query: string, profile: any): string {
+  if (profile.recommendation_reason) return profile.recommendation_reason;
+  const tags = Array.isArray(profile.interest_tags) && profile.interest_tags.length
+    ? ` Tags: ${profile.interest_tags.slice(0, 3).join(", ")}.`
+    : "";
+  const score = typeof profile.match_score === "number" ? ` Score: ${profile.match_score.toFixed(2)}.` : "";
+  return `Matches the intent "${query}".${tags}${score}`.trim();
+}
+
 // ─── Cron helpers ────────────────────────────────────────────────────
 
 const FOLLOW_UP_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
@@ -263,17 +287,97 @@ export default function register(api: any) {
       }
 
       // Return raw profile cards — the agent decides who to recommend
-      return ok({
-        nearby: others.map((p: Profile) => ({
-          device_id: p.device_id,
+      const _refMap: Record<string, string> = {};
+      const profiles = others.map((p: Profile, i: number) => {
+        const ref = String(i + 1);
+        _refMap[ref] = p.device_id;
+        return {
+          ref: ref,
           name: p.display_name || "匿名",
-          line1: p.line1,
-          line2: p.line2,
-          line3: p.line3,
-        })),
+          personal_description: p.line1,
+          looking_for: p.line2,
+          conversation_style: p.line3,
+          more_information: null,
+          profile_slug: null,
+          distance_m: p.distance_m ?? p.dist_meters ?? null,
+        };
+      });
+      (api as any)._antennaRefMap = _refMap;
+      try { await supabase.rpc("save_scan_refs", { p_owner: deviceId, p_refs: _refMap }); } catch {}
+
+      return ok({
+        profiles: profiles,
         total: others.length,
         radius_m: radius,
         instruction: "根据你对用户的了解（记忆、偏好、最近的状态），判断哪些人值得推荐，为每个推荐写一句个性化的匹配理由。",
+      });
+    },
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // Tool: antenna_find_people
+  // ═══════════════════════════════════════════════════════════════════
+  api.registerTool({
+    name: "antenna_find_people",
+    description:
+      "Find 1-3 people by a free-form intent. Returns privacy-safe refs; use ref with antenna_accept if the user wants an intro.",
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Free-form user intent describing the kind of person to find" },
+        sender_id: { type: "string", description: "The sender's user ID" },
+        channel: { type: "string", description: "The channel name" },
+        limit: { type: "number", description: "Maximum profiles to return, 1-3" },
+      },
+      required: ["query", "sender_id", "channel"],
+    },
+    async execute(_id: string, params: any) {
+      const cfg = getConfig(api);
+      const supabase = getSupabase(cfg);
+      const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      const query = String(params.query || "").trim();
+      const limit = Math.min(Math.max(Number(params.limit) || 3, 1), 3);
+      if (query.length < 2) return ok({ count: 0, profiles: [], message: "Tell me what kind of person you want to find." });
+
+      const embedding = await generateEmbeddingForQuery(cfg, query);
+      const { data, error } = await supabase.rpc("antenna_intent_search_people", {
+        p_device_id: deviceId,
+        p_query: query,
+        p_query_embedding: embedding ? `[${embedding.join(",")}]` : null,
+        p_limit: limit,
+      });
+      if (error) return ok({ error: error.message });
+
+      const _refMap: Record<string, string> = {};
+      const profiles = (data || []).map((p: any, i: number) => {
+        const ref = String(i + 1);
+        _refMap[ref] = p.device_id;
+        return {
+          ref: ref,
+          display_name: p.display_name || "匿名",
+          profile_slug: p.profile_slug || null,
+          personal_description: p.personal_description || null,
+          looking_for: p.looking_for || null,
+          conversation_style: p.conversation_style || null,
+          more_information: p.more_information || null,
+          interest_tags: p.interest_tags || [],
+          city: p.city || null,
+          match_score: typeof p.match_score === "number" ? Math.round(p.match_score * 1000) / 1000 : null,
+          recommendation_reason: intentSearchReason(query, p),
+        };
+      });
+      (api as any)._antennaRefMap = { ...(api as any)._antennaRefMap, ..._refMap };
+      if (Object.keys(_refMap).length > 0) {
+        try { await supabase.rpc("save_scan_refs", { p_owner: deviceId, p_refs: _refMap }); } catch {}
+      }
+
+      return ok({
+        count: profiles.length,
+        profiles,
+        query,
+        message: profiles.length
+          ? "Intent search results. Recommend only the best fit(s), then use ref with antenna_accept if the user wants an intro."
+          : "No relevant active profiles found for that intent right now.",
       });
     },
   });
@@ -392,18 +496,28 @@ export default function register(api: any) {
       properties: {
         sender_id: { type: "string" },
         channel: { type: "string" },
+        ref: { type: "string", description: "Ref number from scan/find results" },
         target_device_id: { type: "string", description: "The device_id of the person to accept" },
         contact_info: { type: "string", description: "Optional contact info to share (e.g. 'WeChat: yi_xxx')" },
       },
-      required: ["sender_id", "channel", "target_device_id"],
+      required: ["sender_id", "channel"],
     },
     async execute(_id: string, params: any) {
       const cfg = getConfig(api);
       const supabase = getSupabase(cfg);
       const deviceId = deriveDeviceId(params.sender_id, params.channel);
+      let targetId = params.target_device_id;
+      if (!targetId && params.ref) {
+        targetId = (api as any)._antennaRefMap?.[params.ref];
+        if (!targetId) {
+          const { data } = await supabase.rpc("resolve_ref", { p_owner: deviceId, p_ref: params.ref });
+          targetId = data;
+        }
+      }
+      if (!targetId) return ok({ accepted: false, error: "No target. Provide ref or target_device_id." });
 
       const { error } = await supabase.rpc("upsert_match", {
-        p_device_id_a: deviceId, p_device_id_b: params.target_device_id,
+        p_device_id_a: deviceId, p_device_id_b: targetId,
         p_status: "accepted", p_contact_info: params.contact_info ?? null,
       });
 
@@ -411,13 +525,13 @@ export default function register(api: any) {
 
       const { data: myMatches } = await supabase.rpc("get_my_matches", { p_device_id: deviceId });
       const reverse = (myMatches || []).find(
-        (m: any) => m.device_id_a === params.target_device_id && m.device_id_b === deviceId
+        (m: any) => m.device_id_a === targetId && m.device_id_b === deviceId
       );
 
       if (reverse) {
         // Mutual match! Stop any follow-up cron for this pair
-        stopFollowUpCron(deviceId, params.target_device_id, logger);
-        stopFollowUpCron(params.target_device_id, deviceId, logger);
+        stopFollowUpCron(deviceId, targetId, logger);
+        stopFollowUpCron(targetId, deviceId, logger);
 
         return ok({
           accepted: true, mutual: true,
@@ -429,11 +543,11 @@ export default function register(api: any) {
       }
 
       // Not mutual yet — start a follow-up cron (check every 15min for 2h)
-      const { data: targetProfile } = await supabase.rpc("get_profile", { p_device_id: params.target_device_id });
+      const { data: targetProfile } = await supabase.rpc("get_profile", { p_device_id: targetId });
       const targetName = targetProfile?.display_name || "对方";
 
       startFollowUpCron(
-        deviceId, params.target_device_id,
+        deviceId, targetId,
         params.channel, params.sender_id, targetName, logger,
       );
 
