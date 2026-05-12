@@ -1,6 +1,6 @@
 # 📡 Antenna
 
-AI-powered social discovery. Your agent finds interesting people within 1km.
+AI-powered social discovery. Your agent finds interesting people by intent, nearby context, events, and profile links.
 
 **Website:** [antenna.fyi](https://www.antenna.fyi)
 **npm:** [antenna-fyi](https://www.npmjs.com/package/antenna-fyi)
@@ -32,8 +32,9 @@ supabase/         # Database migrations
 2. Agent helps you write a 3-line profile card
 3. Share GPS via [antenna.fyi/locate](https://www.antenna.fyi/locate)
 4. Agent scans 1km, recommends who's worth meeting
-5. Both accept → swap contacts → meet IRL
-6. Everything disappears in 24 hours
+5. User can also say "I want to find someone who understands X"; agent uses `antenna_find_people` / `antenna find`
+6. Both accept → swap contacts → meet IRL
+7. Everything disappears in 24 hours
 
 ## Privacy
 

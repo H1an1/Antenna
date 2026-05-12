@@ -10,6 +10,26 @@ const DEFAULT_KEY =
 let _client = null;
 let _url = null;
 
+async function generateEmbedding(text, supabaseUrl, supabaseKey) {
+  try {
+    getClient(supabaseUrl, supabaseKey);
+    const key = supabaseKey || process.env.ANTENNA_SUPABASE_KEY || process.env.ANTENNA_KEY || DEFAULT_KEY;
+    const res = await fetch(`${_url || DEFAULT_URL}/functions/v1/generate-embedding`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${key}`,
+      },
+      body: JSON.stringify({ text }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.embedding || null;
+  } catch {
+    return null;
+  }
+}
+
 export function getClient(url, key) {
   const u = url || process.env.ANTENNA_SUPABASE_URL || process.env.ANTENNA_URL || DEFAULT_URL;
   const k = key || process.env.ANTENNA_SUPABASE_KEY || process.env.ANTENNA_KEY || DEFAULT_KEY;
@@ -243,5 +263,60 @@ export async function checkMatches({ device_id, supabaseUrl, supabaseKey }) {
     mutual_matches: mutualMatches,
     incoming_accepts: incomingAccepts,
     message: messages.join("；"),
+  };
+}
+
+// ─── findPeople ──────────────────────────────────────────────────────
+
+export async function findPeople({ query, device_id, limit = 3, supabaseUrl, supabaseKey }) {
+  const sb = getClient(supabaseUrl, supabaseKey);
+  const cleanQuery = String(query || "").trim();
+  const cappedLimit = Math.min(Math.max(Number(limit) || 3, 1), 3);
+
+  if (cleanQuery.length < 2) {
+    return { count: 0, profiles: [], query: cleanQuery, message: "Tell me what kind of person you want to find." };
+  }
+
+  const embedding = await generateEmbedding(cleanQuery, supabaseUrl, supabaseKey);
+  const { data, error } = await sb.rpc("antenna_intent_search_people", {
+    p_device_id: device_id,
+    p_query: cleanQuery,
+    p_query_embedding: embedding ? `[${embedding.join(",")}]` : null,
+    p_limit: cappedLimit,
+  });
+
+  if (error) throw new Error(error.message);
+
+  const refMap = {};
+  const profiles = (data || []).map((p, i) => {
+    const ref = String(i + 1);
+    refMap[ref] = p.device_id;
+    return {
+      ref,
+      display_name: p.display_name || "匿名",
+      profile_slug: p.profile_slug || null,
+      personal_description: p.personal_description || null,
+      looking_for: p.looking_for || null,
+      conversation_style: p.conversation_style || null,
+      more_information: p.more_information || null,
+      interest_tags: p.interest_tags || [],
+      city: p.city || null,
+      match_score: typeof p.match_score === "number" ? Math.round(p.match_score * 1000) / 1000 : null,
+      recommendation_reason: p.recommendation_reason || `Matches the intent "${cleanQuery}".`,
+    };
+  });
+
+  if (device_id && Object.keys(refMap).length > 0) {
+    try { await sb.rpc("save_scan_refs", { p_owner: device_id, p_refs: refMap }); } catch {}
+  }
+
+  return {
+    count: profiles.length,
+    profiles,
+    _ref_map: refMap,
+    query: cleanQuery,
+    message: profiles.length
+      ? "Intent search results. Recommend only the best fit(s), then use ref with antenna_accept if the user wants an intro."
+      : "No relevant active profiles found for that intent right now.",
   };
 }

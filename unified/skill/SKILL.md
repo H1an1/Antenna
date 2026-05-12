@@ -23,6 +23,8 @@ Antenna 帮你的用户发现值得认识的人。不只是"附近的人"--profi
 
 - 如果有 Antenna plugin tools(antenna_scan, antenna_profile 等),直接用。
 - 如果没有,用 CLI:`antenna <command> [flags]`。
+- 用户说"我想找一个 xxx 的人"、"find someone who..."、"有没有做 X 的人"时,优先用 `antenna_find_people`。CLI 等价命令是:
+  `antenna find --id <platform>:<user_id> --query "<用户原话>" --limit 3`
 - **所有 tool 必须传 `chat_id`**--Antenna 用它发通知。
 
 ## Onboarding - 装上后主动引导
@@ -128,6 +130,8 @@ openclaw cron add --every 1h --message "Check antenna matches: call antenna_chec
 - 不返回联系方式或 raw `device_id`
 - 你仍然要结合上下文判断是否推荐,不要机械展示所有结果
 - 用户想认识某人时,用 `ref` 调 `antenna_accept`
+- 没有 plugin tool 时,用 CLI:
+  `antenna find --id <platform>:<user_id> --query "想找一个懂 consumer social 增长的人" --limit 3`
 
 ### 4. Profile 链接
 用户收到 `antenna.fyi/p/xxx` 链接时:

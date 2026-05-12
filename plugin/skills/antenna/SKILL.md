@@ -114,7 +114,7 @@ openclaw cron add --every 1h --message "Check antenna matches: call antenna_chec
 - **首次安装后**: 主动开始 onboarding(名片 → 位置)
 - User shares a location (Telegram live location, WhatsApp pin, or tells you where they are)
 - User asks "附近有谁" / "who's nearby" / "周围有什么人"
-- User says "我想找一个 xxx 的人" / "find me someone who..."
+- User says "我想找一个 xxx 的人" / "find me someone who..." / "有没有做 X 的人" → call `antenna_find_people` first
 - User wants to set up or edit their profile card (名片)
 - User accepts or skips a match
 - User asks about match status or wants to exchange contact info
@@ -207,6 +207,8 @@ Find 1-3 people by free-form intent.
 - Returns privacy-safe profiles with `ref`, `display_name`, `profile_slug`, three card fields, `more_information`, `interest_tags`, `city`, and `recommendation_reason`
 - Does not return contact info or raw `device_id`
 - If the user wants an intro, call `antenna_accept` with the returned `ref`
+- If plugin tools are unavailable, use the CLI fallback:
+  `antenna find --id <platform>:<user_id> --query "想找一个懂 consumer social 增长的人" --limit 3`
 
 ### `antenna_pass`
 Pass/skip a person. They won't be recommended again.

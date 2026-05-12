@@ -11,6 +11,10 @@ npm install -g antenna-fyi
 ## CLI Usage
 
 ```bash
+# Find people by intent (agent-facing search)
+antenna find --id <platform>:<user_id> --query "想找一个懂 consumer social 增长的人"
+antenna find-people --id <platform>:<user_id> --query "find someone building AI hardware" --limit 3
+
 # Create your profile card
 antenna setup --id <platform>:<user_id>
 
@@ -48,6 +52,7 @@ This starts a stdio-based MCP server with tools:
 - `antenna_checkin` — Check in at a location
 - `antenna_accept` — Accept a match
 - `antenna_check_matches` — Check match status
+- `antenna_find_people` — Find 1-3 people from a free-form user intent. Use when the user says "I want to meet/find someone who..."; returns refs and safe profile fields, not contact info or raw device IDs.
 
 ## Hermes Agent Integration
 
@@ -103,9 +108,10 @@ The plugin adds automatic location-triggered scanning, match polling, and real-t
 ## How It Works
 
 1. **Create a profile card** — emoji, name, 3 lines about you
-2. **Scan nearby** — find people within radius at your location
-3. **Accept matches** — if both sides accept, exchange contact info
-4. **Everything expires in 24h** — ephemeral by design
+2. **Find by intent** — users can say "I want someone who understands X"; agents call `antenna_find_people` / `antenna find`
+3. **Scan nearby** — find people within radius at your location
+4. **Accept matches** — if both sides accept, exchange contact info
+5. **Everything expires in 24h** — ephemeral by design
 
 ## License
 

@@ -1098,6 +1098,12 @@ export async function handleDrift(f) {
 export function printHelp() {
   console.log(`📡 Antenna — nearby people discovery
 
+Agent shortcuts:
+  antenna find       Find 1-3 people by intent, e.g. "想找一个懂 consumer social 增长的人"
+  antenna discover   Get today's global recommendation
+  antenna scan       Find nearby people after GPS is available
+  antenna accept     Use a returned ref/profile_slug when the user wants an intro
+
 Usage:
   antenna scan       --lat 39.99 --lng 116.48 [--radius 500] (max 1000) [--id <platform>:<user_id>]
   antenna checkin    --id <platform>:<user_id> --lat 39.99 --lng 116.48
@@ -1107,6 +1113,7 @@ Usage:
   antenna matches    --id <platform>:<user_id>
   antenna discover   --id <platform>:<user_id>
   antenna find       --id <platform>:<user_id> --query '想找一个懂 consumer social 增长的人' [--limit 3]
+  antenna find-people --id <platform>:<user_id> --query 'find someone building AI hardware' [--limit 3]
   antenna event      --create --name 'AI Meetup' --starts-at '...' --ends-at '...' [--lat 34.05 --lng -118.25] [--desc '...'] [--og-image 'url'] [--requires-approval] [--screening-questions 'Q1|Q2'] | --join --code abc123 | --scan --code abc123 | --end --code abc123 --id <platform>:<user_id> | --upload-image --code abc123 --file /path/to/image.png | --update --code abc123 --name 'New Name' | --approve --code abc123 --ref 1 | --reject --code abc123 --ref 1 | --add-host --code abc123 --ref 1
   antenna drift      --throw --message 'hello' | --pick | --reply --bottle-id <uuid> --message 'reply' | --check | --my-bottles  --id <platform>:<user_id>
   antenna watch       --id <platform>:<user_id> [--push hermes|openclaw|terminal]  Watch for new matches in real-time (Ctrl+C to stop)
@@ -1126,5 +1133,5 @@ Environment:
   ANTENNA_SUPABASE_KEY   Supabase anon key (optional, has default)
 
 Install:  npm install -g antenna-fyi
-Or:       npx antenna-fyi scan --lat 39.99 --lng 116.48`);
+Or:       npx antenna-fyi find --id <platform>:<user_id> --query 'AI hardware builders'`);
 }

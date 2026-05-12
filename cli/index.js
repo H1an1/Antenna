@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { scan, getProfile, setProfile, accept, checkMatches, checkin } from "../core/index.js";
+import { scan, getProfile, setProfile, accept, checkMatches, checkin, findPeople } from "antenna-core";
 
 const [,, cmd, ...args] = process.argv;
 
@@ -108,8 +108,31 @@ async function main() {
       break;
     }
 
+    case "find":
+    case "find-people": {
+      const query = f.query || f.q || args.filter((a) => !a.startsWith("--")).join(" ");
+      if (!f.id || !query) return console.error("Usage: antenna find --id telegram:123 --query '想找一个懂 consumer social 增长的人' [--limit 3]");
+      const result = await findPeople({ device_id: f.id, query, limit: +(f.limit || 3) });
+      if (result.count === 0) return console.log(result.message || "No relevant active profiles found.");
+      console.log(`🔎 Intent search: ${result.query}\n`);
+      for (const p of result.profiles) {
+        console.log(`  ${p.display_name}`);
+        if (p.personal_description) console.log(`    ${p.personal_description}`);
+        if (p.looking_for) console.log(`    Looking for: ${p.looking_for}`);
+        if (p.conversation_style) console.log(`    Conversation: ${p.conversation_style}`);
+        if (p.recommendation_reason) console.log(`    → ${p.recommendation_reason}`);
+        console.log(`    ref: ${p.ref}\n`);
+      }
+      break;
+    }
+
     default:
       console.log(`Antenna — nearby people discovery
+
+Agent shortcuts:
+  antenna find     Find 1-3 people by intent, e.g. "想找一个懂 consumer social 增长的人"
+  antenna scan     Find nearby people
+  antenna accept   Use a returned ref/device_id when the user wants an intro
 
 Usage:
   antenna scan     --lat 39.99 --lng 116.48 [--radius 500] [--id telegram:123]
@@ -117,9 +140,10 @@ Usage:
   antenna profile  --id telegram:123 [--name Yi --emoji 🦦 --line1 '...']
   antenna accept   --id telegram:123 --target telegram:789 [--contact 'WeChat: yi']
   antenna matches  --id telegram:123
+  antenna find     --id telegram:123 --query '想找一个懂 consumer social 增长的人' [--limit 3]
 
 Install:  npm install -g antenna-cli
-Or:       npx antenna-cli scan --lat 39.99 --lng 116.48`);
+Or:       npx antenna-cli find --id telegram:123 --query 'AI hardware builders'`);
   }
 }
 
